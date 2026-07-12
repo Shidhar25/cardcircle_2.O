@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 import '../../../shared/widgets/mascot_character.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -279,141 +280,99 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     ),
                   const SizedBox(height: 16),
-                  Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(18),
-                      gradient: valid
-                          ? const LinearGradient(
-                              colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                              begin: Alignment.centerLeft,
-                              end: Alignment.centerRight,
-                            )
-                          : null,
-                      color: valid ? null : const Color(0xFF21262D),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _handleContinue,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        padding: const EdgeInsets.symmetric(vertical: 19),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                              ),
-                            )
-                          : Text(
-                              'Continue',
-                              style: TextStyle(
-                                color: valid
-                                    ? const Color(0xFF050505)
-                                    : AppColors.mutedForeground,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
+                  NeoPopButton.primary(
+                    onPressed: _isLoading ? null : _handleContinue,
+                    isLoading: _isLoading,
+                    enabled: valid,
+                    depth: 6.0,
+                    child: NeoPopButtonText(
+                      'Continue',
+                      color: valid ? const Color(0xFF050505) :Colors.black,
+                      icon: Icons.arrow_forward_rounded,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24.0),
-                    child: Row(
-                      children: const [
-                        Expanded(
-                          child: Divider(color: AppColors.border, thickness: 1),
-                        ),
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 16.0),
-                          child: Text(
-                            'or',
-                            style: TextStyle(
-                              color: AppColors.mutedForeground,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: Divider(color: AppColors.border, thickness: 1),
-                        ),
-                      ],
-                    ),
-                  ),
-                  OutlinedButton(
-                    onPressed: () {},
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppColors.card,
-                      side: const BorderSide(color: AppColors.border),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 17),
-                      minimumSize: const Size(double.infinity, 56),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Text(
-                          'G',
-                          style: TextStyle(
-                            color: Color(0xFF4285F4),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Continue with Google',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 28),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Text.rich(
-                      TextSpan(
-                        text: 'By continuing, you agree to our ',
-                        style: TextStyle(
-                          color: AppColors.mutedForeground,
-                          fontSize: 12,
-                          height: 1.67,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: 'Terms of Service',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          TextSpan(text: ' and '),
-                          TextSpan(
-                            text: 'Privacy Policy',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                  const SizedBox(height: 32),
+                  // Padding(
+                  //   padding: const EdgeInsets.symmetric(vertical: 24.0),
+                  //   child: Row(
+                  //     children: const [
+                  //       Expanded(
+                  //         child: Divider(color: AppColors.border, thickness: 1),
+                  //       ),
+                  //       Padding(
+                  //         padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  //         child: Text(
+                  //           'or',
+                  //           style: TextStyle(
+                  //             color: AppColors.mutedForeground,
+                  //             fontSize: 14,
+                  //           ),
+                  //         ),
+                  //       ),
+                  //       Expanded(
+                  //         child: Divider(color: AppColors.border, thickness: 1),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  // NeoPopButton.outline(
+                  //   onPressed: () {},
+                  //   borderColor: const Color(0xFF4285F4),
+                  //   child: Row(
+                  //     mainAxisAlignment: MainAxisAlignment.center,
+                  //     children: const [
+                  //       Text(
+                  //         'G',
+                  //         style: TextStyle(
+                  //           color: Color(0xFF4285F4),
+                  //           fontSize: 22,
+                  //           fontWeight: FontWeight.w700,
+                  //         ),
+                  //       ),
+                  //       SizedBox(width: 12),
+                  //       Text(
+                  //         'Continue with Google',
+                  //         style: TextStyle(
+                  //           color: Colors.white,
+                  //           fontSize: 16,
+                  //           fontWeight: FontWeight.w600,
+                  //         ),
+                  //       ),
+                  //     ],
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 28),
+                  // const Padding(
+                  //   padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  //   child: Text.rich(
+                  //     TextSpan(
+                  //       text: 'By continuing, you agree to our ',
+                  //       style: TextStyle(
+                  //         color: AppColors.mutedForeground,
+                  //         fontSize: 12,
+                  //         height: 1.67,
+                  //       ),
+                  //       children: [
+                  //         TextSpan(
+                  //           text: 'Terms of Service',
+                  //           style: TextStyle(
+                  //             color: AppColors.primary,
+                  //             fontWeight: FontWeight.w500,
+                  //           ),
+                  //         ),
+                  //         TextSpan(text: ' and '),
+                  //         TextSpan(
+                  //           text: 'Privacy Policy',
+                  //           style: TextStyle(
+                  //             color: AppColors.primary,
+                  //             fontWeight: FontWeight.w500,
+                  //           ),
+                  //         ),
+                  //       ],
+                  //     ),
+                  //     textAlign: TextAlign.center,
+                  //   ),
+                  // ),
+                  // const SizedBox(height: 32),
                 ],
               ),
             ),

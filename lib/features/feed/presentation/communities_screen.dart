@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
+
 
 class CommunityItem {
   final String id;
@@ -333,15 +335,14 @@ class _CommunitiesScreenState extends State<CommunitiesScreen> {
                               ],
                             ),
                             const SizedBox(height: 16),
-                            ElevatedButton(
+                            NeoPopButton(
                               onPressed: () {},
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                              ),
+                              style: NeoPopButtonStyle.flat,
+                              color: Colors.white,
+                              shadowColor: const Color(0xFF999999),
+                              depth: 4.0,
+                              fullWidth: false,
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
                               child: const Text(
                                 'Open Lounge 💬',
                                 style: TextStyle(
@@ -474,20 +475,14 @@ class _CommunitiesScreenState extends State<CommunitiesScreen> {
                               ),
                             ),
                             const SizedBox(width: 12),
-                            ElevatedButton(
+                            NeoPopButton(
                               onPressed: () => _toggleJoin(item.id),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: item.isJoined ? Colors.transparent : Colors.white,
-                                elevation: 0,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                minimumSize: const Size(60, 32),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  side: item.isJoined
-                                      ? const BorderSide(color: AppColors.border, width: 1.5)
-                                      : BorderSide.none,
-                                ),
-                              ),
+                              style: NeoPopButtonStyle.flat,
+                              color: item.isJoined ? Colors.transparent : Colors.white,
+                              shadowColor: item.isJoined ? Colors.transparent : const Color(0xFF999999),
+                              depth: item.isJoined ? 0 : 3.0,
+                              fullWidth: false,
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                               child: Text(
                                 item.isJoined ? 'Leave' : 'Join',
                                 style: TextStyle(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class SelectTagsScreen extends StatefulWidget {
   const SelectTagsScreen({super.key});
@@ -306,47 +307,14 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
             const SizedBox(height: 16),
             Padding(
               padding: const EdgeInsets.all(24.0),
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: _selectedCategoryIds.isNotEmpty && !_saving
-                      ? const LinearGradient(
-                          colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        )
-                      : null,
-                  color: _selectedCategoryIds.isNotEmpty && !_saving ? null : const Color(0xFF21262D),
-                ),
-                child: ElevatedButton(
-                  onPressed: _selectedCategoryIds.isNotEmpty && !_saving ? _handleNext : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 19),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : const Text(
-                          'Next Step',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
+              child: NeoPopButton.primary(
+                onPressed: _selectedCategoryIds.isNotEmpty && !_saving ? _handleNext : null,
+                isLoading: _saving,
+                enabled: _selectedCategoryIds.isNotEmpty && !_saving,
+                depth: 6.0,
+                child: const NeoPopButtonText(
+                  'Next Step',
+                  icon: Icons.arrow_forward_rounded,
                 ),
               ),
             ),

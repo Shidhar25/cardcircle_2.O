@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/logger_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'core/services/api_service.dart';
+import 'core/services/notification_service.dart';
 import 'features/auth/state/auth_state.dart';
 import 'features/feed/state/feed_state.dart';
 import 'features/circle/state/circle_state.dart';
@@ -18,6 +20,7 @@ import 'features/feed/presentation/tabs_layout.dart';
 import 'features/profile/presentation/edit_profile_screen.dart';
 import 'features/profile/presentation/select_tags_screen.dart';
 import 'features/profile/presentation/select_cards_screen.dart';
+import 'features/feed/presentation/notifications_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +30,16 @@ void main() async {
   LoggerService.info('Starting CardCircle App...');
   await LocalStorageService.init();
   await ApiService.init();
+
+  // Initialize Firebase and Request Notification Permissions
+  try {
+    await Firebase.initializeApp();
+    LoggerService.info('Firebase initialized successfully.');
+    final fcmToken = await NotificationService.requestPermissionAndGetToken();
+    LoggerService.info('FCM Token: $fcmToken');
+  } catch (e, stack) {
+    LoggerService.error('Failed to initialize Firebase or notifications', e, stack);
+  }
 
   runApp(
     MultiProvider(
@@ -63,11 +76,13 @@ class CardCircleApp extends StatelessWidget {
           secondary: AppColors.purple,
           surface: AppColors.card,
         ),
+        fontFamily: 'Gilroy',
         textTheme: GoogleFonts.interTextTheme(
           ThemeData.dark().textTheme,
         ).apply(
           bodyColor: Colors.white,
           displayColor: Colors.white,
+          fontFamily: 'Gilroy',
         ),
       ),
       initialRoute: '/',
@@ -81,6 +96,7 @@ class CardCircleApp extends StatelessWidget {
         '/edit-profile': (context) => const EditProfileScreen(),
         '/select-tags': (context) => const SelectTagsScreen(),
         '/select-cards': (context) => const SelectCardsScreen(),
+        '/notifications': (context) => const NotificationsScreen(),
       },
     );
   }

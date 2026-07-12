@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_flutter/core/theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
 
 class HackCard extends StatelessWidget {

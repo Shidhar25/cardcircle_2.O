@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_flutter/core/theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
+import 'neo_pop_button.dart';
 
 class ChallengeCard extends StatelessWidget {
   final Challenge challenge;
@@ -175,16 +176,14 @@ class ChallengeCard extends StatelessWidget {
               ),
               if (isDone) ...[
                 const SizedBox(width: 16),
-                ElevatedButton(
+                NeoPopButton(
                   onPressed: challenge.claimed ? null : () => onComplete(challenge.id),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: challenge.claimed ? AppColors.elevated : AppColors.green,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+                  style: NeoPopButtonStyle.flat,
+                  color: challenge.claimed ? AppColors.elevated : AppColors.green,
+                  shadowColor: challenge.claimed ? Colors.black : const Color(0xFF006633),
+                  depth: 4.0,
+                  fullWidth: false,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   child: Text(
                     challenge.claimed ? 'Claimed' : 'Claim',
                     style: TextStyle(

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class SelectCardsScreen extends StatefulWidget {
   const SelectCardsScreen({super.key});
@@ -396,51 +397,16 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                           },
                         )),
             ),
-            const SizedBox(height: 16),
-            // Finish Setup Button
             Padding(
               padding: const EdgeInsets.all(24.0),
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  gradient: _selectedCards.isNotEmpty && !_saving
-                      ? const LinearGradient(
-                          colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        )
-                      : null,
-                  color: _selectedCards.isNotEmpty && !_saving ? null : const Color(0xFF21262D),
-                ),
-                child: ElevatedButton(
-                  onPressed: _selectedCards.isNotEmpty && !_saving ? _handleFinish : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(vertical: 19),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                  ),
-                  child: _saving
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                          ),
-                        )
-                      : const Text(
-                          'Finish Setup',
-                          style: TextStyle(
-                            color: Colors.black,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
+              child: NeoPopButton.primary(
+                onPressed: _selectedCards.isNotEmpty && !_saving ? _handleFinish : null,
+                isLoading: _saving,
+                enabled: _selectedCards.isNotEmpty && !_saving,
+                depth: 6.0,
+                child: const NeoPopButtonText(
+                  'Finish Setup',
+                  icon: Icons.check_circle_rounded,
                 ),
               ),
             ),

@@ -15,6 +15,8 @@ class User {
   final List<Badge> badges;
   final int friendsCount;
   final int hacksShared;
+  final int followersCount;
+  final int followingCount;
 
   User({
     required this.name,
@@ -30,6 +32,8 @@ class User {
     required this.badges,
     required this.friendsCount,
     required this.hacksShared,
+    required this.followersCount,
+    required this.followingCount,
   });
 
   User copyWith({
@@ -46,6 +50,8 @@ class User {
     List<Badge>? badges,
     int? friendsCount,
     int? hacksShared,
+    int? followersCount,
+    int? followingCount,
   }) {
     return User(
       name: name ?? this.name,
@@ -61,6 +67,8 @@ class User {
       badges: badges ?? this.badges,
       friendsCount: friendsCount ?? this.friendsCount,
       hacksShared: hacksShared ?? this.hacksShared,
+      followersCount: followersCount ?? this.followersCount,
+      followingCount: followingCount ?? this.followingCount,
     );
   }
 }

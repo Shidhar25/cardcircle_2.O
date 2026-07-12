@@ -5,10 +5,16 @@ import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/card_visual.dart';
 import '../../../shared/models/models.dart' as models;
+import '../../../shared/widgets/neo_pop_button.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   static const List<Color> levelColors = [
     Color(0xFF8B5CF6),
     Color(0xFF00D4FF),
@@ -35,6 +41,14 @@ class ProfileScreen extends StatelessWidget {
   };
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<AuthState>(context, listen: false).refreshProfileFromServer();
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authState = Provider.of<AuthState>(context);
     final user = authState.user;
@@ -44,9 +58,14 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 32),
-          child: Column(
+        child: RefreshIndicator(
+          onRefresh: () => Provider.of<AuthState>(context, listen: false).refreshProfileFromServer(),
+          color: AppColors.primary,
+          backgroundColor: AppColors.card,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.only(bottom: 32),
+            child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Padding(
@@ -186,11 +205,9 @@ class ProfileScreen extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    _buildStatCol('Saved', '₹${(user.savings / 1000).toStringAsFixed(0)}K', AppColors.green),
+                    _buildStatCol('Followers', user.followersCount.toString(), AppColors.cyan),
                     _buildStatDivider(),
-                    _buildStatCol('Streak', user.streak.toString(), AppColors.cyan),
-                    _buildStatDivider(),
-                    _buildStatCol('Hacks', user.hacksShared.toString(), AppColors.gold),
+                    _buildStatCol('Following', user.followingCount.toString(), AppColors.gold),
                     _buildStatDivider(),
                     _buildStatCol('Friends', user.friendsCount.toString(), AppColors.purple),
                   ],
@@ -439,6 +456,7 @@ class ProfileScreen extends StatelessWidget {
           ),
         ),
       ),
+      ),
     );
   }
 
@@ -467,7 +485,7 @@ class ProfileScreen extends StatelessWidget {
                 style: TextStyle(color: AppColors.mutedForeground),
               ),
             ),
-            ElevatedButton(
+            NeoPopButton(
               onPressed: () async {
                 Navigator.pop(context);
                 await ApiService.logout();
@@ -476,12 +494,12 @@ class ProfileScreen extends StatelessWidget {
                   Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4757),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+              style: NeoPopButtonStyle.flat,
+              color: const Color(0xFFFF4757),
+              shadowColor: const Color(0xFF992A34),
+              depth: 4.0,
+              fullWidth: false,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: const Text(
                 'Log out',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -518,7 +536,7 @@ class ProfileScreen extends StatelessWidget {
                 style: TextStyle(color: AppColors.mutedForeground),
               ),
             ),
-            ElevatedButton(
+            NeoPopButton(
               onPressed: () async {
                 Navigator.pop(context);
                 try {
@@ -535,20 +553,20 @@ class ProfileScreen extends StatelessWidget {
                 } catch (e) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
+                      const SnackBar(
                         content: Text('Failed to remove card'),
-                        backgroundColor: const Color(0xFFFF4757),
+                        backgroundColor: Color(0xFFFF4757),
                       ),
                     );
                   }
                 }
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4757),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
+              style: NeoPopButtonStyle.flat,
+              color: const Color(0xFFFF4757),
+              shadowColor: const Color(0xFF992A34),
+              depth: 4.0,
+              fullWidth: false,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: const Text(
                 'Remove',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),

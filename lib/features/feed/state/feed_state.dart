@@ -182,4 +182,16 @@ class FeedState extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  Future<void> loadHacks() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    _initData();
+    notifyListeners();
+  }
+
+  Future<void> loadOffers() async {
+    await Future.delayed(const Duration(milliseconds: 500));
+    _initData();
+    notifyListeners();
+  }
 }

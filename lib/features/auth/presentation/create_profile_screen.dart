@@ -5,6 +5,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class CreateProfileScreen extends StatefulWidget {
   const CreateProfileScreen({super.key});
@@ -462,38 +463,20 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
                 ),
               ),
               const SizedBox(height: 16),
-              Opacity(
-                opacity: _saving ? 0.6 : 1.0,
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF00D4FF), Color(0xFF8B5CF6)],
-                      begin: Alignment.centerLeft,
-                      end: Alignment.centerRight,
-                    ),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: _saving ? null : _handleSubmit,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 19),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    child: const Text(
-                      'Complete Profile 🚀',
-                      style: TextStyle(
-                        color: Color(0xFF050505),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
+              NeoPopButton(
+                onPressed: _saving ? null : _handleSubmit,
+                style: NeoPopButtonStyle.elevated,
+                isLoading: _saving,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF00D4FF), Color(0xFF8B5CF6)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                ),
+                shadowColor: const Color(0xFF004466),
+                depth: 7.0,
+                child: const NeoPopButtonText(
+                  'Complete Profile',
+                  icon: Icons.rocket_launch_rounded,
                 ),
               ),
               const SizedBox(height: 32),

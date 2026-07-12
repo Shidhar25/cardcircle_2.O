@@ -4,88 +4,95 @@ import '../../../core/services/api_service.dart';
 import '../../../shared/models/models.dart';
 
 class CircleState extends ChangeNotifier {
-  late List<Friend> _friends;
-
-  CircleState() {
-    _initData();
-  }
-
+  List<Friend> _friends = [];
   List<Friend> get friends => _friends;
 
-  void _initData() {
-    _friends = [
-      Friend(
-        id: 'f1',
-        name: 'Rahul Mehta',
-        username: '@rahulmehta',
-        initials: 'RM',
-        cardsCount: 6,
-        savings: '₹32,400',
-        level: 'Hack Master',
-        isFollowing: true,
-        commonCards: ['SBI Cashback', 'HDFC Regalia'],
-        gradientColors: [const Color(0xFF134E5E), const Color(0xFF71B280)],
-      ),
-      Friend(
-        id: 'f2',
-        name: 'Priya Singh',
-        username: '@priyasingh',
-        initials: 'PS',
-        cardsCount: 4,
-        savings: '₹21,800',
-        level: 'Rewards Expert',
-        isFollowing: true,
-        commonCards: ['HDFC Regalia Gold'],
-        gradientColors: [const Color(0xFF23074D), const Color(0xFF8B2FC9)],
-      ),
-      Friend(
-        id: 'f3',
-        name: 'Amit Patel',
-        username: '@amitpatel',
-        initials: 'AP',
-        cardsCount: 8,
-        savings: '₹54,200',
-        level: 'Legend',
-        isFollowing: false,
-        commonCards: ['HDFC Regalia Gold', 'Axis Ace'],
-        gradientColors: [const Color(0xFF0F3460), const Color(0xFF533483)],
-      ),
-      Friend(
-        id: 'f4',
-        name: 'Deepika Rao',
-        username: '@deepikarao',
-        initials: 'DR',
-        cardsCount: 3,
-        savings: '₹12,600',
-        level: 'Saver',
-        isFollowing: true,
-        commonCards: ['Axis Ace'],
-        gradientColors: [const Color(0xFF1A1A2E), const Color(0xFF16213E)],
-      ),
-      Friend(
-        id: 'f5',
-        name: 'Karan Joshi',
-        username: '@karanjoshi',
-        initials: 'KJ',
-        cardsCount: 5,
-        savings: '₹28,900',
-        level: 'Expert',
-        isFollowing: false,
-        commonCards: ['ICICI Amazon Pay', 'SBI Cashback'],
-        gradientColors: [const Color(0xFF7B5B00), const Color(0xFFC89B00)],
-      ),
-    ];
-  }
+  List<Friend> get suggestedFriends => _friends.where((f) => f.username != 'Not on CardCircle' && !f.isFollowing && f.level != 'Me').toList();
+  List<Friend> get inviteOnlyFriends => _friends.where((f) => f.username == 'Not on CardCircle').toList();
 
-  void toggleFollow(String id) {
+  List<Map<String, dynamic>> _incomingRequests = [];
+  List<Map<String, dynamic>> get incomingRequests => _incomingRequests;
+
+  List<Map<String, dynamic>> _followers = [];
+  List<Map<String, dynamic>> get followersList => _followers;
+
+  List<Map<String, dynamic>> _following = [];
+  List<Map<String, dynamic>> get followingList => _following;
+
+  bool _isLoadingIncoming = false;
+  bool get isLoadingIncoming => _isLoadingIncoming;
+
+  bool _isLoadingFollowersFollowing = false;
+  bool get isLoadingFollowersFollowing => _isLoadingFollowersFollowing;
+
+  Future<bool> toggleFollow(String id) async {
     LoggerService.debug('Toggling follow for friend ID: $id');
+    Friend? targetFriend;
     for (var f in _friends) {
       if (f.id == id) {
-        f.isFollowing = !f.isFollowing;
+        targetFriend = f;
         break;
       }
     }
+
+    if (targetFriend == null) return false;
+
+    final wasFollowing = targetFriend.isFollowing;
+    final success = wasFollowing
+        ? await ApiService.unfollowUser(id)
+        : await ApiService.followUser(id);
+
+    if (success) {
+      targetFriend.isFollowing = !wasFollowing;
+      notifyListeners();
+      return true;
+    }
+    return false;
+  }
+
+  Future<void> fetchIncomingRequests() async {
+    _isLoadingIncoming = true;
     notifyListeners();
+    final list = await ApiService.getIncomingFollowRequests();
+    if (list != null) {
+      _incomingRequests = list;
+    }
+    _isLoadingIncoming = false;
+    notifyListeners();
+  }
+
+  Future<void> fetchFollowersAndFollowing() async {
+    _isLoadingFollowersFollowing = true;
+    notifyListeners();
+    final followersResult = await ApiService.getFollowers();
+    if (followersResult != null) {
+      _followers = followersResult;
+    }
+    final followingResult = await ApiService.getFollowing();
+    if (followingResult != null) {
+      _following = followingResult;
+    }
+    _isLoadingFollowersFollowing = false;
+    notifyListeners();
+  }
+
+  Future<bool> approveRequest(String followId, List<String> allowedCardIds) async {
+    final success = await ApiService.approveFollowRequest(followId, allowedCardIds);
+    if (success) {
+      _incomingRequests.removeWhere((req) => req['follow_id'] == followId);
+      await loadContactsFromDirectory();
+      notifyListeners();
+    }
+    return success;
+  }
+
+  Future<bool> rejectRequest(String followId) async {
+    final success = await ApiService.rejectFollowRequest(followId);
+    if (success) {
+      _incomingRequests.removeWhere((req) => req['follow_id'] == followId);
+      notifyListeners();
+    }
+    return success;
   }
 
   Future<void> loadContactsFromDirectory() async {
@@ -130,5 +137,7 @@ class CircleState extends ChangeNotifier {
       _friends = directoryFriends;
       notifyListeners();
     }
+    await fetchIncomingRequests();
+    await fetchFollowersAndFollowing();
   }
 }

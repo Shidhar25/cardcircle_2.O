@@ -1,4 +1,4 @@
-package com.cardcircle.mobile_flutter
+package com.cardcircle.cardcircle
 
 import io.flutter.embedding.android.FlutterActivity
 

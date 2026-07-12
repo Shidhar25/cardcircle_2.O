@@ -8,6 +8,7 @@ import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/widgets/mascot_character.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class VerifyOTPScreen extends StatefulWidget {
   const VerifyOTPScreen({super.key});
@@ -400,43 +401,20 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen>
                       ),
                     ),
                     const SizedBox(height: 24),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        gradient: filled
-                            ? const LinearGradient(
-                                colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                                begin: Alignment.centerLeft,
-                                end: Alignment.centerRight,
-                              )
-                            : null,
-                        color: filled ? null : const Color(0xFF21262D),
-                      ),
-                      child: ElevatedButton(
-                        onPressed: _verifyOtp,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 19),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: Text(
-                          'Verify OTP',
-                          style: TextStyle(
-                            color: filled ? const Color(0xFF050505) : AppColors.mutedForeground,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
+                    NeoPopButton.primary(
+                      onPressed: _verifyOtp,
+                      isLoading: _isLoading,
+                      enabled: filled,
+                      child: NeoPopButtonText(
+                        'Verify OTP',
+                        color: filled ? const Color(0xFF050505) : AppColors.mutedForeground,
+                        icon: Icons.verified_rounded,
                       ),
                     ),
                     const SizedBox(height: 20),
-                    TextButton(
+                    NeoPopButton.link(
                       onPressed: _timer == 0 ? _handleResend : null,
+                      enabled: _timer == 0,
                       child: Text(
                         _timer > 0 ? 'Resend OTP in ${_timer}s' : 'Resend OTP',
                         style: TextStyle(

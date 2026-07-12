@@ -434,8 +434,8 @@ class ApiService {
         body: jsonEncode(payload),
       );
       final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        return body['data'];
+      if (body is Map<String, dynamic>) {
+        return body;
       }
     } catch (e, stack) {
       LoggerService.error('Error syncing contacts', e, stack);
@@ -478,6 +478,166 @@ class ApiService {
       LoggerService.error('Error deleting user cards', e, stack);
     }
     return false;
+  }
+
+  // 21. Follow user
+  static Future<bool> followUser(String recipientId) async {
+    try {
+      LoggerService.info('Following user $recipientId...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({
+          "message": "Hi, I would like to follow you"
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        return body['success'] == true;
+      }
+      LoggerService.warning('Follow user failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error following user', e, stack);
+    }
+    return false;
+  }
+
+  // 22. Unfollow user
+  static Future<bool> unfollowUser(String recipientId) async {
+    try {
+      LoggerService.info('Unfollowing user $recipientId...');
+      final response = await http.delete(
+        Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
+        headers: _headers(requireAuth: true),
+      );
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        if (response.body.isEmpty) return true;
+        final body = jsonDecode(response.body);
+        return body['success'] == true;
+      }
+      LoggerService.warning('Unfollow user failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error unfollowing user', e, stack);
+    }
+    return false;
+  }
+
+  // 23. Get incoming follow requests
+  static Future<List<Map<String, dynamic>>?> getIncomingFollowRequests() async {
+    try {
+      LoggerService.info('Fetching incoming follow requests...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/requests/incoming'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error fetching incoming follow requests', e, stack);
+    }
+    return null;
+  }
+
+  // 24. Get outgoing follow requests
+  static Future<List<Map<String, dynamic>>?> getOutgoingFollowRequests() async {
+    try {
+      LoggerService.info('Fetching outgoing follow requests...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/requests/outgoing'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error fetching outgoing follow requests', e, stack);
+    }
+    return null;
+  }
+
+  // 25. Approve follow request
+  static Future<bool> approveFollowRequest(String followId, List<String> allowedCardIds) async {
+    try {
+      LoggerService.info('Approving follow request $followId...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/follow/requests/$followId/approve'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({
+          "allowed_card_ids": allowedCardIds
+        }),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        return body['success'] == true;
+      }
+      LoggerService.warning('Approve follow request failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error approving follow request', e, stack);
+    }
+    return false;
+  }
+
+  // 26. Reject follow request
+  static Future<bool> rejectFollowRequest(String followId) async {
+    try {
+      LoggerService.info('Rejecting follow request $followId...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/follow/requests/$followId/reject'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final body = jsonDecode(response.body);
+        return body['success'] == true;
+      }
+      LoggerService.warning('Reject follow request failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error rejecting follow request', e, stack);
+    }
+    return false;
+  }
+
+  // 27. Get followers list
+  static Future<List<Map<String, dynamic>>?> getFollowers() async {
+    try {
+      LoggerService.info('Fetching followers list...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/followers'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error fetching followers list', e, stack);
+    }
+    return null;
+  }
+
+  // 28. Get following list
+  static Future<List<Map<String, dynamic>>?> getFollowing() async {
+    try {
+      LoggerService.info('Fetching following list...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/following'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error fetching following list', e, stack);
+    }
+    return null;
   }
 
   static Future<void> logout() async {

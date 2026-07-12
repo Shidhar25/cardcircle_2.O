@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_flutter/core/theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
+import 'neo_pop_button.dart';
 
 class OfferCard extends StatelessWidget {
   final Offer offer;
@@ -186,18 +187,14 @@ class OfferCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
 
-              // Action Claim Button
-              ElevatedButton(
+              NeoPopButton(
                 onPressed: () {},
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.elevated,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: const BorderSide(color: AppColors.border, width: 1),
-                  ),
-                ),
+                style: NeoPopButtonStyle.flat,
+                color: AppColors.elevated,
+                shadowColor: const Color(0xFF050505),
+                depth: 3.5,
+                fullWidth: false,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 child: const Text(
                   'Claim Deal',
                   style: TextStyle(

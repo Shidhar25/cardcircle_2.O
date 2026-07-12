@@ -1,16 +1,24 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_flutter/core/theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 import '../models/models.dart';
+import 'neo_pop_button.dart';
 
-class FriendItem extends StatelessWidget {
+class FriendItem extends StatefulWidget {
   final Friend friend;
-  final VoidCallback onToggleFollow;
+  final Future<void> Function() onToggleFollow;
 
   const FriendItem({
     super.key,
     required this.friend,
     required this.onToggleFollow,
   });
+
+  @override
+  State<FriendItem> createState() => _FriendItemState();
+}
+
+class _FriendItemState extends State<FriendItem> {
+  bool _isLoading = false;
 
   @override
   Widget build(BuildContext context) {
@@ -31,14 +39,14 @@ class FriendItem extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: LinearGradient(
-                colors: friend.gradientColors,
+                colors: widget.friend.gradientColors,
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
             ),
             alignment: Alignment.center,
             child: Text(
-              friend.initials,
+              widget.friend.initials,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -56,7 +64,7 @@ class FriendItem extends StatelessWidget {
                 Row(
                   children: [
                     Text(
-                      friend.name,
+                      widget.friend.name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 14,
@@ -71,7 +79,7 @@ class FriendItem extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: Text(
-                        friend.level,
+                        widget.friend.level,
                         style: const TextStyle(
                           color: AppColors.primary,
                           fontSize: 8,
@@ -83,24 +91,12 @@ class FriendItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  friend.username,
+                  widget.friend.username,
                   style: const TextStyle(
                     color: AppColors.mutedForeground,
                     fontSize: 11,
                   ),
                 ),
-                const SizedBox(height: 4),
-                // Common Cards Row
-                if (friend.commonCards.isNotEmpty)
-                  Text(
-                    'Also owns: ${friend.commonCards.join(", ")}',
-                    style: const TextStyle(
-                      color: AppColors.mutedForeground,
-                      fontSize: 10,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 1,
-                  ),
               ],
             ),
           ),
@@ -108,36 +104,49 @@ class FriendItem extends StatelessWidget {
           // Follow/Following/Invite Action Button
           Builder(
             builder: (context) {
-              final bool isInviteOnly = friend.level == 'Invite Only';
-              return ElevatedButton(
-                onPressed: isInviteOnly
-                    ? () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Invitation link sent to ${friend.name}!'),
-                            backgroundColor: AppColors.green,
-                          ),
-                        );
-                      }
-                    : onToggleFollow,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: isInviteOnly
-                      ? Colors.transparent
-                      : (friend.isFollowing ? Colors.transparent : AppColors.primary),
-                  shadowColor: Colors.transparent,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    side: (isInviteOnly || friend.isFollowing)
-                        ? const BorderSide(color: AppColors.border, width: 1.5)
-                        : BorderSide.none,
-                  ),
-                ),
+              final bool isInviteOnly = widget.friend.level == 'Invite Only';
+              final bool isFollowing = widget.friend.isFollowing;
+              return NeoPopButton(
+                onPressed: _isLoading
+                    ? null
+                    : (isInviteOnly
+                        ? () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Invitation link sent to ${widget.friend.name}!'),
+                                backgroundColor: AppColors.green,
+                              ),
+                            );
+                          }
+                        : () async {
+                            setState(() {
+                              _isLoading = true;
+                            });
+                            try {
+                              await widget.onToggleFollow();
+                            } finally {
+                              if (mounted) {
+                                setState(() {
+                                  _isLoading = false;
+                                });
+                              }
+                            }
+                          }),
+                style: NeoPopButtonStyle.flat,
+                color: isInviteOnly || isFollowing
+                    ? Colors.transparent
+                    : AppColors.primary,
+                shadowColor: isInviteOnly || isFollowing
+                    ? Colors.transparent
+                    : const Color(0xFF008899),
+                depth: isInviteOnly || isFollowing ? 0 : 4.0,
+                fullWidth: false,
+                isLoading: _isLoading,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 child: Text(
-                  isInviteOnly ? 'Invite' : (friend.isFollowing ? 'Following' : 'Follow'),
+                  isInviteOnly ? 'Invite' : (isFollowing ? 'Following' : 'Follow'),
                   style: TextStyle(
-                    color: (isInviteOnly || friend.isFollowing) ? AppColors.mutedForeground : const Color(0xFF050505),
+                    color: (isInviteOnly || isFollowing) ? AppColors.mutedForeground : const Color(0xFF050505),
                     fontSize: 12,
                     fontWeight: FontWeight.w700,
                   ),

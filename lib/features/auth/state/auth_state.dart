@@ -140,6 +140,8 @@ class AuthState extends ChangeNotifier {
       badges: badges,
       friendsCount: 24,
       hacksShared: 8,
+      followersCount: 0,
+      followingCount: 0,
     );
   }
 
@@ -156,6 +158,7 @@ class AuthState extends ChangeNotifier {
           initials: parsed.initials,
         );
         fetchUserCards();
+        refreshProfileFromServer();
       } catch (e, s) {
         LoggerService.error('Failed to parse persistent profile', e, s);
       }
@@ -181,6 +184,25 @@ class AuthState extends ChangeNotifier {
     );
     notifyListeners();
     fetchUserCards();
+    refreshProfileFromServer();
+  }
+
+  Future<void> refreshProfileFromServer() async {
+    try {
+      LoggerService.info('Refreshing profile from server...');
+      final data = await ApiService.getUserProfile();
+      if (data != null) {
+        _user = _user.copyWith(
+          name: data['name'] ?? _user.name,
+          username: '@${data['username'] ?? _user.username.replaceAll('@', '')}',
+          followersCount: data['followers_count'] ?? _user.followersCount,
+          followingCount: data['following_count'] ?? _user.followingCount,
+        );
+        notifyListeners();
+      }
+    } catch (e, s) {
+      LoggerService.error('Error refreshing profile from server', e, s);
+    }
   }
 
   void addPoints(int amount) {

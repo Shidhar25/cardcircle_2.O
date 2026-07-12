@@ -4,6 +4,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -204,46 +205,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ),
                   ),
                 const SizedBox(height: 24),
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    gradient: isFormValid && !_loading
-                        ? const LinearGradient(
-                            colors: [Color(0xFF00D4FF), Color(0xFF0099CC)],
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                          )
-                        : null,
-                    color: isFormValid && !_loading ? null : const Color(0xFF21262D),
-                  ),
-                  child: ElevatedButton(
-                    onPressed: isFormValid && !_loading ? _handleSave : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 18),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                            ),
-                          )
-                        : const Text(
-                            'Save Changes',
-                            style: TextStyle(
-                              color: Colors.black,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
+                NeoPopButton.primary(
+                  onPressed: isFormValid && !_loading ? _handleSave : null,
+                  isLoading: _loading,
+                  enabled: isFormValid && !_loading,
+                  depth: 6.0,
+                  child: const NeoPopButtonText(
+                    'Save Changes',
+                    icon: Icons.check_circle_rounded,
                   ),
                 ),
               ],

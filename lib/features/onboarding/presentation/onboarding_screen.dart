@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/mascot_character.dart';
+import '../../../shared/widgets/neo_pop_button.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -247,54 +248,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: _currentIndex == _slides.length - 1
-                  ? Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(18),
-                        gradient: const LinearGradient(
-                          colors: [Color(0xFF00D4FF), Color(0xFF8B5CF6)],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                      ),
-                      child: ElevatedButton(
-                        onPressed: _handleGetStarted,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          padding: const EdgeInsets.symmetric(vertical: 19),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: const [
-                            Text(
-                              'Get Started',
-                              style: TextStyle(
-                                color: Color(0xFF050505),
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              '→',
-                              style: TextStyle(
-                                color: Color(0xFF050505),
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                  ? NeoPopButton.primary(
+                      onPressed: _handleGetStarted,
+                      depth: 7.0,
+                      child: const NeoPopButtonText(
+                        'Get Started',
+                        icon: Icons.arrow_forward_rounded,
                       ),
                     )
-                  : InkWell(
+                  : GestureDetector(
                       onTap: _handleNext,
-                      borderRadius: BorderRadius.circular(32),
                       child: Container(
                         width: 64,
                         height: 64,

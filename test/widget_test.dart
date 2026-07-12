@@ -1,10 +1,10 @@
+import 'package:cardcircle/features/auth/state/auth_state.dart';
+import 'package:cardcircle/features/challenges/state/challenges_state.dart';
+import 'package:cardcircle/features/circle/state/circle_state.dart';
+import 'package:cardcircle/features/feed/state/feed_state.dart';
+import 'package:cardcircle/main.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
-import 'package:mobile_flutter/main.dart';
-import 'package:mobile_flutter/features/auth/state/auth_state.dart';
-import 'package:mobile_flutter/features/feed/state/feed_state.dart';
-import 'package:mobile_flutter/features/circle/state/circle_state.dart';
-import 'package:mobile_flutter/features/challenges/state/challenges_state.dart';
 
 void main() {
   testWidgets('App smoke test', (WidgetTester tester) async {

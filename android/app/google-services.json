@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "942454035921",
+    "project_id": "cardcircle-25a1d",
+    "storage_bucket": "cardcircle-25a1d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:942454035921:android:2b8ac115bdfbdc7574bcf0",
+        "android_client_info": {
+          "package_name": "com.cardcircle.cardcircle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCcIjkinUK0A8CW2u5StOELXfxCPoaMq04"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
