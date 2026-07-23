@@ -10,7 +10,6 @@ import 'core/services/notification_service.dart';
 import 'features/auth/state/auth_state.dart';
 import 'features/feed/state/feed_state.dart';
 import 'features/circle/state/circle_state.dart';
-import 'features/challenges/state/challenges_state.dart';
 import 'features/onboarding/presentation/splash_screen.dart';
 import 'features/onboarding/presentation/onboarding_screen.dart';
 import 'features/auth/presentation/login_screen.dart';
@@ -21,6 +20,7 @@ import 'features/profile/presentation/edit_profile_screen.dart';
 import 'features/profile/presentation/select_tags_screen.dart';
 import 'features/profile/presentation/select_cards_screen.dart';
 import 'features/feed/presentation/notifications_screen.dart';
+import 'features/feed/presentation/how_to_apply_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -47,11 +47,6 @@ void main() async {
         ChangeNotifierProvider(create: (_) => AuthState()),
         ChangeNotifierProvider(create: (_) => FeedState()),
         ChangeNotifierProvider(create: (_) => CircleState()),
-        ChangeNotifierProxyProvider<AuthState, ChallengesState>(
-          create: (_) => ChallengesState(),
-          update: (_, authState, challengesState) =>
-              (challengesState ?? ChallengesState())..updateAuth(authState),
-        ),
       ],
       child: const CardCircleApp(),
     ),
@@ -97,6 +92,7 @@ class CardCircleApp extends StatelessWidget {
         '/select-tags': (context) => const SelectTagsScreen(),
         '/select-cards': (context) => const SelectCardsScreen(),
         '/notifications': (context) => const NotificationsScreen(),
+        '/how-to-apply': (context) => const HowToApplyScreen(),
       },
     );
   }

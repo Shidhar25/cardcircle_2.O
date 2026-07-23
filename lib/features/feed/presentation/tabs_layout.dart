@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../../core/theme/app_theme.dart';
 import 'feed_screen.dart';
-
-import 'communities_screen.dart';
+import 'discover_screen.dart';
 import '../../circle/presentation/circle_screen.dart';
-import '../../challenges/presentation/challenges_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 
 class TabsLayout extends StatefulWidget {
@@ -26,12 +24,11 @@ class _TabsLayoutState extends State<TabsLayout> {
     _screens = [
       FeedScreen(
         onNavigateToProfile: () {
-          _onTabTapped(4);
+          _onTabTapped(3);
         },
       ),
-      const CommunitiesScreen(),
+      const DiscoverScreen(),
       const CircleScreen(),
-      const ChallengesScreen(),
       const ProfileScreen(),
     ];
   }
@@ -84,8 +81,8 @@ class _TabsLayoutState extends State<TabsLayout> {
               ),
               _buildNavItem(
                 index: 1,
-                icon: Icons.groups_rounded,
-                label: 'Communities',
+                icon: Icons.explore_rounded,
+                label: 'Discover',
               ),
               _buildNavItem(
                 index: 2,
@@ -94,11 +91,6 @@ class _TabsLayoutState extends State<TabsLayout> {
               ),
               _buildNavItem(
                 index: 3,
-                icon: Icons.stars_rounded,
-                label: 'Challenges',
-              ),
-              _buildNavItem(
-                index: 4,
                 icon: Icons.person_rounded,
                 label: 'Profile',
               ),

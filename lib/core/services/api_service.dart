@@ -640,6 +640,115 @@ class ApiService {
     return null;
   }
 
+  // 29. Get My Hacks
+  static Future<List<Map<String, dynamic>>?> getMyHacks() async {
+    try {
+      LoggerService.info('Fetching My Hacks...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/hacks/getmyhacks'),
+        headers: _headers(),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['hacks'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+      LoggerService.warning('getMyHacks failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error fetching My Hacks', e, stack);
+    }
+    return null;
+  }
+
+  // 30. Get Circle Hacks
+  static Future<List<Map<String, dynamic>>?> getCircleHacks() async {
+    try {
+      LoggerService.info('Fetching Circle Hacks...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/hacks/getcirclehacks'),
+        headers: _headers(),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['hacks'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+      LoggerService.warning('getCircleHacks failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error fetching Circle Hacks', e, stack);
+    }
+    return null;
+  }
+
+  // 31. Get FAQ from Hack ID
+  static Future<List<Map<String, dynamic>>?> getFaqFromHackId(String hackId) async {
+    try {
+      LoggerService.info('Fetching FAQs for hack $hackId...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/hacks/getfaqfromhackid/$hackId'),
+        headers: _headers(),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['faqlist'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+      LoggerService.warning('getFaqFromHackId failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error fetching FAQs for hack $hackId', e, stack);
+    }
+    return null;
+  }
+
+  // 32. Register Push Token
+  static Future<bool> registerPushToken({
+    required String token,
+    String deviceType = 'ANDROID',
+    String deviceName = 'Test Device',
+  }) async {
+    try {
+      LoggerService.info('Registering push token...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/push/tokens/register'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({
+          'token': token,
+          'device_type': deviceType,
+          'device_name': deviceName,
+        }),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        LoggerService.info('Push token registered successfully.');
+        return true;
+      }
+      LoggerService.warning('Push token registration failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error registering push token', e, stack);
+    }
+    return false;
+  }
+
+  // 33. Get Push Notifications
+  static Future<List<Map<String, dynamic>>?> getNotifications() async {
+    try {
+      LoggerService.info('Fetching push notifications...');
+      final response = await http.get(
+        Uri.parse('$baseUrl/push/notifications'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? body['notifications'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
+      }
+      LoggerService.warning('getNotifications failed: ${response.statusCode} - ${response.body}');
+    } catch (e, stack) {
+      LoggerService.error('Error fetching push notifications', e, stack);
+    }
+    return null;
+  }
+
   static Future<void> logout() async {
     _accessToken = null;
     _refreshToken = null;

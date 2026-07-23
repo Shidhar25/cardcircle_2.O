@@ -159,6 +159,7 @@ class AuthState extends ChangeNotifier {
         );
         fetchUserCards();
         refreshProfileFromServer();
+        registerPushToken();
       } catch (e, s) {
         LoggerService.error('Failed to parse persistent profile', e, s);
       }
@@ -271,5 +272,13 @@ class AuthState extends ChangeNotifier {
       notifyListeners();
     }
     return success;
+  }
+
+  void registerPushToken() {
+    ApiService.registerPushToken(
+      token: 'fdgf9SN3Ti2EHg0aHjm5f0:APA91bFg_YP4MsMAbULew5iQvw14VuQuBfmt0M1ojp4OIGB_0UanzyV8PtTwPUsr_98Nx6e3HuGQ8Sw_z5hxivm9MyKHTM57NVYSGf-VJuaR85h1D97moYg',
+      deviceType: 'ANDROID',
+      deviceName: 'Flutter Test Device',
+    );
   }
 }

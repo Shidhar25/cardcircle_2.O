@@ -1,197 +1,143 @@
 import 'package:flutter/material.dart';
 import '../../../core/services/logger_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../shared/models/models.dart';
 
 class FeedState extends ChangeNotifier {
   late List<Hack> _hacks;
   late List<Offer> _offers;
+  List<Hack> _myHacks = [];
+  List<Hack> _circleHacks = [];
+  bool _isLoadingMyHacks = false;
+  bool _isLoadingCircleHacks = false;
 
   FeedState() {
-    _initData();
+    _initSeedData();
+    fetchMyHacks();
+    fetchCircleHacks();
   }
 
   List<Hack> get hacks => _hacks;
   List<Offer> get offers => _offers;
+  List<Hack> get myHacks => _myHacks.isNotEmpty ? _myHacks : _hacks;
+  List<Hack> get circleHacks => _circleHacks.isNotEmpty ? _circleHacks : _hacks;
+  bool get isLoadingMyHacks => _isLoadingMyHacks;
+  bool get isLoadingCircleHacks => _isLoadingCircleHacks;
 
-  void _initData() {
+  void _initSeedData() {
     _hacks = [
       Hack(
-        id: 'h1',
-        title: 'Amazon Pay Gift Card + SBI Cashback trick',
-        description:
-            'Buy Amazon Pay Gift Cards using SBI Cashback Card to earn 5% extra cashback on all Amazon purchases. Stack with Amazon Pay offers for up to 15% total savings on every order.',
-        cardName: 'SBI Cashback',
-        savings: '₹2,400/yr',
-        likes: 342,
-        author: 'Rahul Mehta',
-        authorInitials: 'RM',
-        authorLevel: 'Hack Master',
-        isLocked: false,
-        category: 'Cashback',
-        timestamp: '2h ago',
-        liked: false,
-      ),
-      Hack(
-        id: 'h2',
-        title: 'HDFC SmartBuy Reward Points Multiplier',
-        description:
-            'Use Regalia Gold during SmartBuy portal for 5x reward points. Redeem during Apple or Samsung sales for maximum value. Effective return of 8-10% on electronics purchases.',
-        cardName: 'HDFC Regalia Gold',
-        savings: '₹8,500/yr',
-        likes: 891,
-        author: 'Priya Singh',
-        authorInitials: 'PS',
-        authorLevel: 'Rewards Expert',
-        isLocked: false,
-        category: 'Rewards',
-        timestamp: '5h ago',
-        liked: true,
-      ),
-      Hack(
-        id: 'h3',
-        title: 'Unlimited Airport Lounge Access Strategy',
-        description:
-            'This premium hack reveals how to maximize complimentary lounge visits across 5 Indian airports using card benefits and partner access...',
-        cardName: 'HDFC Regalia Gold',
-        savings: '₹15,000/yr',
-        likes: 1247,
-        author: 'Amit Patel',
-        authorInitials: 'AP',
-        authorLevel: 'Legend',
-        isLocked: true,
-        category: 'Travel',
-        timestamp: '1d ago',
-        liked: false,
-      ),
-      Hack(
-        id: 'h4',
-        title: 'Swiggy + Axis Ace Combo Deal',
-        description:
-            'Activate Axis Ace on Swiggy for flat 5% cashback. Pair with Swiggy One membership for free delivery. Works on all Swiggy orders including Instamart groceries.',
-        cardName: 'Axis Ace',
-        savings: '₹3,200/yr',
-        likes: 456,
-        author: 'Deepika Rao',
-        authorInitials: 'DR',
-        authorLevel: 'Saver',
-        isLocked: false,
-        category: 'Dining',
-        timestamp: '3d ago',
-        liked: false,
-      ),
-      Hack(
-        id: 'h5',
-        title: 'Fuel Surcharge Waiver + Reward Stack',
-        description:
-            'Complete fuel savings strategy using the right card combination across BPCL and HP pumps...',
-        cardName: 'ICICI Amazon Pay',
-        savings: '₹5,500/yr',
-        likes: 678,
-        author: 'Karan Joshi',
-        authorInitials: 'KJ',
-        authorLevel: 'Expert',
-        isLocked: true,
+        id: '9e8b7d0b-6c97-4d56-9b7d-6de1d5f1d341',
+        name: 'Swipe smart, fuel free',
+        heading:
+            'Use your RBL card at IndianOil ITPS POS, earn fuel points, convert them to XTRA rewards, and redeem them for fuel payments.',
+        steps: [
+          HackStep(name: 'Step 1', heading: 'Swipe at ITPS POS', icon: '💳', description: 'Swipe your RBL Bank XTRA Credit Card at an IndianOil ITPS POS machine.'),
+          HackStep(name: 'Step 2', heading: 'Earn Fuel Points', icon: '⛽', description: 'Collect fuel points on fuel transactions at IndianOil outlets.'),
+          HackStep(name: 'Step 3', heading: 'Convert to XTRA', icon: '🔄', description: 'Convert your fuel points into XTRA rewards points.'),
+          HackStep(name: 'Step 4', heading: 'Redeem for Fuel', icon: '📱', description: 'Use XTRA rewards points to pay for fuel in the IndianOil app by purchasing Fuel e-vouchers.'),
+          HackStep(name: 'Step 5', heading: 'Scan Voucher', icon: '🔍', description: 'Ask the fuel attendant to scan the QR code or enter the voucher code on the IndianOil POS to apply the payment.'),
+        ],
+        cards: ['IndianOil RBL Bank XTRA Credit Card'],
+        savings: '8.5%',
         category: 'Fuel',
-        timestamp: '4d ago',
-        liked: false,
+        rating: 4.8,
+        availedby: '10 people on CardCircle have found this hack helpful',
+        thingsToNote: [
+          'Use IndianOil ITPS POS only, because other machines may not have the correct merchant code and accelerated fuel points may not be credited.',
+          'Redeeming fuel points to XTRA rewards points has a Rs. 99 + GST fee, so redeem in bulk.',
+          'Keep the transaction amount between Rs. 500 and Rs. 4000, otherwise the 1% fuel surcharge waiver may not apply.',
+          'Maximum 2,000 fuel points can be earned per month, which allows fuel spends of up to about Rs. 13,334 at IndianOil outlets.'
+        ],
+      ),
+      Hack(
+        id: 'c3a7b7c5-4a2f-4f7d-9d35-1f2d5b9f7a11',
+        name: 'Swipe smart, save on gas',
+        heading:
+            'Use your RBL card at IndianOil ITPS POS, earn fuel points, convert them to XTRA rewards, and redeem them while ordering gas in the IndianOil app.',
+        steps: [
+          HackStep(name: 'Step 1', heading: 'Swipe at ITPS POS', icon: '💳', description: 'Swipe your RBL Bank XTRA Credit Card at an IndianOil ITPS POS machine.'),
+          HackStep(name: 'Step 2', heading: 'Earn Fuel Points', icon: '⛽', description: 'Collect fuel points on fuel transactions at IndianOil outlets.'),
+          HackStep(name: 'Step 3', heading: 'Convert to XTRA', icon: '🔄', description: 'Convert your fuel points into XTRA rewards points.'),
+          HackStep(name: 'Step 4', heading: 'Redeem in App', icon: '📱', description: 'Open the IndianOil app and redeem XTRA rewards points while ordering gas.'),
+        ],
+        cards: ['IndianOil RBL Bank XTRA Credit Card'],
+        savings: 'Up to 8.5%',
+        category: 'Gas',
+        rating: 4.6,
+        availedby: '10 people on CardCircle have found this hack helpful',
+        thingsToNote: [
+          'Use IndianOil ITPS POS only, because other machines may not have the correct merchant code and fuel points may not be credited.',
+          'Redeeming fuel points to XTRA rewards points has a Rs. 99 + GST fee, so redeem in bulk.',
+          'Keep the transaction amount between Rs. 500 and Rs. 4000, otherwise the 1% fuel surcharge waiver may not apply.',
+          'Maximum 2,000 fuel points can be earned per month, which allows fuel spends of up to about Rs. 13,334 at IndianOil outlets.'
+        ],
       ),
     ];
 
-    _offers = [
-      Offer(
-        id: 'o1',
-        merchant: 'Amazon',
-        discount: '5% Cashback',
-        description: 'Get 5% cashback on all Amazon purchases this weekend only',
-        expiresIn: '2d 14h',
-        cardName: 'SBI Cashback',
-        category: 'Shopping',
-        isHot: true,
-        cashback: 'Up to ₹500',
-      ),
-      Offer(
-        id: 'o2',
-        merchant: 'Swiggy',
-        discount: 'Flat ₹100 Off',
-        description: 'On orders above ₹300 using Axis Ace card',
-        expiresIn: '18h',
-        cardName: 'Axis Ace',
-        category: 'Dining',
-        isHot: true,
-        cashback: '₹100 off',
-      ),
-      Offer(
-        id: 'o3',
-        merchant: 'MakeMyTrip',
-        discount: '12% Off',
-        description: 'On flights booked with HDFC Regalia Gold',
-        expiresIn: '5d',
-        cardName: 'HDFC Regalia Gold',
-        category: 'Travel',
-        isHot: false,
-        cashback: 'Up to ₹3,000',
-      ),
-      Offer(
-        id: 'o4',
-        merchant: 'Myntra',
-        discount: '15% Cashback',
-        description: 'On fashion purchases with ICICI Amazon Pay this month',
-        expiresIn: '3d',
-        cardName: 'ICICI Amazon Pay',
-        category: 'Shopping',
-        isHot: false,
-        cashback: 'Up to ₹750',
-      ),
-      Offer(
-        id: 'o5',
-        merchant: 'BookMyShow',
-        discount: '20% Off',
-        description: 'On movie tickets every Friday with HDFC cards',
-        expiresIn: '1d 6h',
-        cardName: 'HDFC Millennia',
-        category: 'Entertainment',
-        isHot: true,
-        cashback: 'Up to ₹200',
-      ),
-      Offer(
-        id: 'o6',
-        merchant: 'Flipkart',
-        discount: '10% Off',
-        description: 'During Big Billion Days with Axis Bank cards',
-        expiresIn: '4d',
-        cardName: 'Axis Ace',
-        category: 'Shopping',
-        isHot: false,
-        cashback: 'Up to ₹1,000',
-      ),
-    ];
+    _offers = [];
+  }
+
+  Future<void> fetchMyHacks() async {
+    _isLoadingMyHacks = true;
+    notifyListeners();
+    try {
+      final list = await ApiService.getMyHacks();
+      if (list != null && list.isNotEmpty) {
+        _myHacks = list.map((e) => Hack.fromJson(e)).toList();
+        LoggerService.info('Fetched ${_myHacks.length} My Hacks from backend.');
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error in fetchMyHacks', e, stack);
+    } finally {
+      _isLoadingMyHacks = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> fetchCircleHacks() async {
+    _isLoadingCircleHacks = true;
+    notifyListeners();
+    try {
+      final list = await ApiService.getCircleHacks();
+      if (list != null && list.isNotEmpty) {
+        _circleHacks = list.map((e) => Hack.fromJson(e)).toList();
+        LoggerService.info('Fetched ${_circleHacks.length} Circle Hacks from backend.');
+      }
+    } catch (e, stack) {
+      LoggerService.error('Error in fetchCircleHacks', e, stack);
+    } finally {
+      _isLoadingCircleHacks = false;
+      notifyListeners();
+    }
   }
 
   void likeHack(String id) {
     LoggerService.debug('Toggling like for hack ID: $id');
-    for (var h in _hacks) {
-      if (h.id == id) {
-        h.liked = !h.liked;
-        if (h.liked) {
-          h.likes += 1;
-        } else {
-          h.likes -= 1;
+    for (var list in [_hacks, _myHacks, _circleHacks]) {
+      for (var h in list) {
+        if (h.id == id) {
+          h.liked = !h.liked;
+          if (h.liked) {
+            h.likes += 1;
+          } else {
+            h.likes -= 1;
+          }
+          break;
         }
-        break;
       }
     }
     notifyListeners();
   }
 
   Future<void> loadHacks() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    _initData();
-    notifyListeners();
+    await Future.wait([
+      fetchMyHacks(),
+      fetchCircleHacks(),
+    ]);
   }
 
   Future<void> loadOffers() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-    _initData();
-    notifyListeners();
+    await loadHacks();
   }
 }

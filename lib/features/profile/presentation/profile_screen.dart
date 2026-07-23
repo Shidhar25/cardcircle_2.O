@@ -31,15 +31,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     {'label': 'Help & Support', 'icon': Icons.help_outline_rounded},
   ];
 
-  static const Map<String, IconData> iconMap = {
-    'star': Icons.star,
-    'airplane': Icons.local_airport_rounded,
-    'card': Icons.credit_card,
-    'flash': Icons.flash_on,
-    'diamond': Icons.diamond_rounded,
-    'flame': Icons.local_fire_department_rounded,
-  };
-
   @override
   void initState() {
     super.initState();
@@ -279,93 +270,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.border, width: 1),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '₹${user.savings.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (Match m) => '${m[1]},')}',
-                          style: const TextStyle(
-                            color: AppColors.green,
-                            fontSize: 26,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        const Text(
-                          'Saved this year',
-                          style: TextStyle(
-                            color: AppColors.mutedForeground,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: AppColors.green.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.trending_up, size: 20, color: AppColors.green),
-                          SizedBox(width: 6),
-                          Text(
-                            'Gold Saver',
-                            style: TextStyle(
-                              color: AppColors.green,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20.0),
-                child: Text(
-                  'Badges',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              GridView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 10,
-                  crossAxisSpacing: 10,
-                  childAspectRatio: 1.0,
-                ),
-                itemCount: user.badges.length,
-                itemBuilder: (context, index) {
-                  final badge = user.badges[index];
-                  final iconData = iconMap[badge.iconName] ?? Icons.star;
-                  return _buildBadgeItem(badge, iconData);
-                },
-              ),
-              const SizedBox(height: 24),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 20.0),
                 child: Text(
@@ -599,65 +503,5 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildStatDivider() {
     return Container(width: 1, height: 30, color: AppColors.border);
-  }
-
-  Widget _buildBadgeItem(models.Badge badge, IconData icon) {
-    return Container(
-      decoration: BoxDecoration(
-        color: badge.earned ? badge.color.withValues(alpha: 0.1) : AppColors.elevated,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: badge.earned ? badge.color : AppColors.border,
-          width: 1,
-        ),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Opacity(
-            opacity: badge.earned ? 1.0 : 0.5,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(icon, size: 22, color: badge.earned ? badge.color : AppColors.mutedForeground),
-                const SizedBox(height: 6),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4.0),
-                  child: Text(
-                    badge.name,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                      color: badge.earned ? Colors.white : AppColors.mutedForeground,
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          if (!badge.earned)
-            Positioned(
-              top: 4,
-              right: 4,
-              child: Container(
-                width: 16,
-                height: 16,
-                decoration: const BoxDecoration(
-                  color: AppColors.elevated,
-                  shape: BoxShape.circle,
-                ),
-                alignment: Alignment.center,
-                child: const Icon(
-                  Icons.lock_rounded,
-                  size: 9,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 }
