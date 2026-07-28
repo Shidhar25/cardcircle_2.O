@@ -51,21 +51,7 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
         if (rawFaqs != null && rawFaqs.isNotEmpty) {
           _faqs = rawFaqs.map((e) => FaqModel.fromJson(e)).toList();
         } else {
-          // Fallback seed FAQs if API list empty
-          _faqs = [
-            FaqModel(
-              question: 'Is this hack applicable to all cards?',
-              answer: 'No, this hack is specifically optimized for ${hack.cardName}.',
-            ),
-            FaqModel(
-              question: 'What is the maximum savings limit per month?',
-              answer: 'You can earn maximum rewards up to card monthly caps as per terms.',
-            ),
-            FaqModel(
-              question: 'Are there any redemption fees?',
-              answer: 'Certain point conversions may carry a minimal fee (e.g. Rs. 99 + GST), so redeem in bulk.',
-            ),
-          ];
+          _faqs = [];
         }
         _isLoadingFaqs = false;
       });
@@ -74,67 +60,19 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final hack = ModalRoute.of(context)?.settings.arguments as Hack? ??
-        Hack(
-          id: '9e8b7d0b-6c97-4d56-9b7d-6de1d5f1d341',
-          name: 'Amazon - 5% Cashback',
-          heading: 'Buy Amazon Pay Gift Cards using SBI Cashback Card.',
-          steps: [
-            HackStep(
-              name: 'Step 1',
-              heading: 'Check Eligibility First',
-              icon: '📋',
-              description:
-                  'Make sure your credit score is above 720 and you haven\'t applied for a similar card in the last 6 months.',
-            ),
-            HackStep(
-              name: 'Step 2',
-              heading: 'Prepare Your Documents',
-              icon: '📁',
-              description:
-                  'Keep your PAN card, Aadhaar, salary slips (last 3 months), and bank statements ready for quick upload.',
-            ),
-            HackStep(
-              name: 'Step 3',
-              heading: 'Use the Referral Link',
-              icon: '🔗',
-              description:
-                  'Apply through our verified referral link to unlock exclusive signup bonuses and accelerated approval.',
-            ),
-          ],
-          cards: ['SBI Cashback'],
-          savings: '5% Cashback',
-          category: 'Shopping',
-          rating: 4.7,
-          availedby: '102 people availed',
-          thingsToNote: [],
-        );
+    final hack = ModalRoute.of(context)?.settings.arguments as Hack?;
 
-    final displaySteps = hack.steps.isNotEmpty
-        ? hack.steps
-        : [
-            HackStep(
-              name: 'Step 1',
-              heading: 'Check Eligibility First',
-              icon: '📋',
-              description:
-                  'Make sure your credit score is above 720 and you haven\'t applied for a similar card in the last 6 months.',
-            ),
-            HackStep(
-              name: 'Step 2',
-              heading: 'Prepare Your Documents',
-              icon: '📁',
-              description:
-                  'Keep your PAN card, Aadhaar, salary slips (last 3 months), and bank statements ready for quick upload.',
-            ),
-            HackStep(
-              name: 'Step 3',
-              heading: 'Use the Referral Link',
-              icon: '🔗',
-              description:
-                  'Apply through our verified referral link to unlock exclusive signup bonuses and accelerated approval.',
-            ),
-          ];
+    if (hack == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
+        body: const Center(
+          child: Text('Hack details not found', style: TextStyle(color: Colors.white)),
+        ),
+      );
+    }
+
+    final displaySteps = hack.steps;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -195,6 +133,33 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sharing this hack with your circle...'),
+                            backgroundColor: AppColors.primary,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppColors.border, width: 1),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.share_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -204,246 +169,404 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
               // Summary Banner Card
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                height: 180,
                 decoration: BoxDecoration(
                   color: AppColors.card,
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: AppColors.border, width: 1),
-                  image: const DecorationImage(
-                    image: NetworkImage(
-                      'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=600&q=80',
-                    ),
-                    fit: BoxFit.cover,
-                    opacity: 0.25,
-                  ),
                 ),
-                child: Container(
-                  padding: const EdgeInsets.all(16.0),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        Colors.black.withValues(alpha: 0.85),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
-                              ),
-                            ),
-                            child: Text(
-                              hack.category.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                child: Column(
+                  children: [
+                    Container(
+                      height: 160,
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        image: DecorationImage(
+                          image: NetworkImage(
+                            hack.image.isNotEmpty
+                                ? hack.image
+                                : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=600&q=80',
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.5),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Row(
+                          fit: BoxFit.cover,
+                          opacity: 0.4,
+                        ),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(16.0),
+                        decoration: BoxDecoration(
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.8),
+                            ],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                ...List.generate(
-                                  5,
-                                  (i) => const Icon(Icons.star_rounded,
-                                      color: Color(0xFFFFD700), size: 14),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: Colors.white.withValues(alpha: 0.2),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    hack.category.toUpperCase(),
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  '${hack.rating} (102)',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      ...List.generate(
+                                        5,
+                                        (i) => Icon(
+                                          Icons.star_rounded,
+                                          color: i < hack.rating.floor()
+                                              ? const Color(0xFFFFD700)
+                                              : Colors.white24,
+                                          size: 14,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${hack.rating}',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ],
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  hack.name,
+                                  style: const TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    hack.cardName,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                      Column(
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            hack.name,
+                            hack.heading,
                             style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
                               color: Colors.white,
+                              height: 1.5,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.elevated,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              hack.cardName,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w600,
+                          if (hack.availedby.isNotEmpty || hack.circledetail.isNotEmpty) ...[
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: AppColors.primary.withValues(alpha: 0.15)),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (hack.availedby.isNotEmpty)
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.people_outline_rounded, size: 16, color: AppColors.primary),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            hack.availedby,
+                                            style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  if (hack.availedby.isNotEmpty && hack.circledetail.isNotEmpty)
+                                    const SizedBox(height: 8),
+                                  if (hack.circledetail.isNotEmpty)
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.hub_outlined, size: 16, color: Color(0xFF00FF88)),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            hack.circledetail,
+                                            style: const TextStyle(color: Color(0xFF00FF88), fontSize: 12, fontWeight: FontWeight.w600),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                ],
                               ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ).animate().fade(duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
 
               const SizedBox(height: 24),
 
               // Steps Section
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: Container(
-                  padding: const EdgeInsets.all(20.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.list_alt_rounded,
-                              size: 22, color: AppColors.primary),
-                          SizedBox(width: 10),
-                          Text(
-                            'Steps',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+              if (displaySteps.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(20.0),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.list_alt_rounded,
+                                size: 22, color: AppColors.primary),
+                            SizedBox(width: 10),
+                            Text(
+                              'Steps',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Scrollable Steps Container
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 450),
+                          child: Theme(
+                            data: Theme.of(context).copyWith(
+                              scrollbarTheme: ScrollbarThemeData(
+                                thumbColor: WidgetStateProperty.all(AppColors.primary.withValues(alpha: 0.3)),
+                                thickness: WidgetStateProperty.all(4),
+                                radius: const Radius.circular(10),
+                              ),
+                            ),
+                            child: Scrollbar(
+                              thumbVisibility: true,
+                              child: SingleChildScrollView(
+                                physics: const BouncingScrollPhysics(),
+                                padding: const EdgeInsets.only(right: 12),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: displaySteps.length,
+                                  itemBuilder: (context, idx) {
+                                    final step = displaySteps[idx];
+                                    final isLast = idx == displaySteps.length - 1;
+                                    final stepNum = idx + 1;
+
+                                    return Row(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Timeline Node & Line
+                                        Column(
+                                          children: [
+                                            Container(
+                                              width: 44,
+                                              height: 44,
+                                              decoration: BoxDecoration(
+                                                shape: BoxShape.circle,
+                                                color: AppColors.primary.withValues(alpha: 0.12),
+                                                border: Border.all(
+                                                  color: AppColors.primary,
+                                                  width: 1.5,
+                                                ),
+                                              ),
+                                              alignment: Alignment.center,
+                                              child: _getStepIcon(idx, step.icon),
+                                            ),
+                                            if (!isLast)
+                                              Container(
+                                                width: 2,
+                                                height: 90,
+                                                color: AppColors.primary.withValues(alpha: 0.3),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(width: 14),
+
+                                        // Step Card Content
+                                        Expanded(
+                                          child: Container(
+                                            margin: const EdgeInsets.only(bottom: 16),
+                                            padding: const EdgeInsets.all(16.0),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.elevated,
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                  color: AppColors.border, width: 1),
+                                            ),
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  step.name.toUpperCase().isNotEmpty ? step.name.toUpperCase() : 'STEP $stepNum',
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.primary,
+                                                    letterSpacing: 0.8,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  step.heading,
+                                                  style: const TextStyle(
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 6),
+                                                Text(
+                                                  step.description,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    color: AppColors.mutedForeground,
+                                                    height: 1.4,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
+                                ),
+                              ),
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
+                        ),
+                      ],
+                    ),
+                  ),
+                ).animate().fade(delay: 200.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
 
-                      // Steps Timeline List
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: displaySteps.length,
-                        itemBuilder: (context, idx) {
-                          final step = displaySteps[idx];
-                          final isLast = idx == displaySteps.length - 1;
-                          final stepNum = idx + 1;
+              const SizedBox(height: 24),
 
-                          return Row(
+              // Things to Note Section
+              if (hack.thingsToNote.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(20.0),
+                    decoration: BoxDecoration(
+                      color: AppColors.card,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border, width: 1),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.info_outline_rounded,
+                                size: 22, color: Color(0xFFFFD700)),
+                            SizedBox(width: 10),
+                            Text(
+                              'Things to Note',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        ...hack.thingsToNote.map((note) => Padding(
+                          padding: const EdgeInsets.only(bottom: 12.0),
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Timeline Node & Line
-                              Column(
-                                children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: AppColors.primary.withValues(alpha: 0.12),
-                                      border: Border.all(
-                                        color: AppColors.primary,
-                                        width: 1.5,
-                                      ),
-                                    ),
-                                    alignment: Alignment.center,
-                                    child: _getStepIcon(idx, step.icon),
-                                  ),
-                                  if (!isLast)
-                                    Container(
-                                      width: 2,
-                                      height: 90,
-                                      color: AppColors.primary.withValues(alpha: 0.3),
-                                    ),
-                                ],
+                              const Padding(
+                                padding: EdgeInsets.only(top: 4.0),
+                                child: Icon(Icons.circle, size: 6, color: Color(0xFFFFD700)),
                               ),
-                              const SizedBox(width: 14),
-
-                              // Step Card Content
+                              const SizedBox(width: 12),
                               Expanded(
-                                child: Container(
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  padding: const EdgeInsets.all(16.0),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.elevated,
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(
-                                        color: AppColors.border, width: 1),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'STEP $stepNum',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppColors.primary,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        step.heading,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        step.description,
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: AppColors.mutedForeground,
-                                          height: 1.4,
-                                        ),
-                                      ),
-                                    ],
+                                child: Text(
+                                  note,
+                                  style: const TextStyle(
+                                    color: AppColors.mutedForeground,
+                                    fontSize: 14,
+                                    height: 1.5,
                                   ),
                                 ),
                               ),
                             ],
-                          );
-                        },
-                      ),
-                    ],
+                          ),
+                        )),
+                      ],
+                    ),
                   ),
-                ),
-              ).animate().fade(delay: 200.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
+                ).animate().fade(delay: 250.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
 
               const SizedBox(height: 24),
 
@@ -578,6 +701,13 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
   }
 
   Widget _getStepIcon(int idx, String emojiIcon) {
+    if (emojiIcon.isNotEmpty) {
+      return Text(
+        emojiIcon,
+        style: const TextStyle(fontSize: 20),
+      );
+    }
+
     if (idx == 0) {
       return const Icon(Icons.assignment_turned_in_outlined,
           color: AppColors.primary, size: 20);
@@ -587,10 +717,7 @@ class _HowToApplyScreenState extends State<HowToApplyScreen> {
     } else if (idx == 2) {
       return const Icon(Icons.link_rounded, color: AppColors.primary, size: 20);
     } else {
-      return Text(
-        emojiIcon.isNotEmpty ? emojiIcon : '💡',
-        style: const TextStyle(fontSize: 18),
-      );
+      return const Icon(Icons.lightbulb_outline_rounded, color: AppColors.primary, size: 20);
     }
   }
 }

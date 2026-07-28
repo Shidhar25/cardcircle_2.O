@@ -409,20 +409,60 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               Positioned(
                 top: 10,
                 right: 10,
-                child: GestureDetector(
-                  onTap: () => feedState.likeHack(hack.id),
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      shape: BoxShape.circle,
+                child: Column(
+                  children: [
+                    // Like Button
+                    GestureDetector(
+                      onTap: () => feedState.likeHack(hack.id),
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.4),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          hack.liked
+                              ? Icons.favorite
+                              : Icons.favorite_border_rounded,
+                          color: hack.liked ? Colors.redAccent : Colors.white,
+                          size: 20,
+                        ),
+                      ),
                     ),
-                    child: Icon(
-                      hack.liked ? Icons.favorite : Icons.favorite_border_rounded,
-                      color: hack.liked ? Colors.redAccent : Colors.white,
-                      size: 20,
+
+                    const SizedBox(height: 10),
+
+                    // Share Button
+                    GestureDetector(
+                      onTap: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sharing this hack with your circle...'),
+                            backgroundColor: AppColors.primary,
+                            duration: Duration(seconds: 2),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: AppColors.border,
+                            width: 1,
+                          ),
+                        ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.share_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
 
@@ -451,7 +491,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        '${hack.rating} (124)',
+                        '${hack.rating}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 12,
@@ -497,8 +537,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                 // Description Heading
                 Text(
                   hack.heading,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 13,
                     color: Colors.white70,
