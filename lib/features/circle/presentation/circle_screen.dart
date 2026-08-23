@@ -6,6 +6,7 @@ import '../../auth/state/auth_state.dart';
 import '../state/circle_state.dart';
 import '../../../shared/widgets/friend_item.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class CircleScreen extends StatefulWidget {
   const CircleScreen({super.key});
@@ -83,7 +84,7 @@ class _CircleScreenState extends State<CircleScreen> {
             fullWidth: false,
             depth: 4.0,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: const NeoPopButtonText('Allow', color: Color(0xFF050505), fontSize: 14),
+            child: const NeoPopButtonText('Allow', color: AppColors.darkText, fontSize: 14),
           ),
         ],
       ),
@@ -290,7 +291,7 @@ class _CircleScreenState extends State<CircleScreen> {
                           },
                           fullWidth: true,
                           depth: 4.0,
-                          child: const NeoPopButtonText('Approve', color: Color(0xFF050505), fontSize: 14),
+                          child: const NeoPopButtonText('Approve', color: AppColors.darkText, fontSize: 14),
                         ),
                       ),
                     ],
@@ -392,7 +393,7 @@ class _CircleScreenState extends State<CircleScreen> {
                     decoration: const BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: LinearGradient(
-                        colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                        colors: [AppColors.secondary, AppColors.purple],
                       ),
                     ),
                     alignment: Alignment.center,
@@ -435,7 +436,7 @@ class _CircleScreenState extends State<CircleScreen> {
                     fullWidth: false,
                     depth: 3.0,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    child: const NeoPopButtonText('Approve', color: Color(0xFF050505), fontSize: 11),
+                    child: const NeoPopButtonText('Approve', color: AppColors.darkText, fontSize: 11),
                   ),
                 ],
               );
@@ -504,7 +505,7 @@ class _CircleScreenState extends State<CircleScreen> {
                                     decoration: const BoxDecoration(
                                       shape: BoxShape.circle,
                                       gradient: LinearGradient(
-                                        colors: [Color(0xFFFC5C7D), Color(0xFF6A82FB)],
+                                        colors: [AppColors.secondary, AppColors.primary],
                                       ),
                                     ),
                                     alignment: Alignment.center,
@@ -542,14 +543,14 @@ class _CircleScreenState extends State<CircleScreen> {
                                     },
                                     style: NeoPopButtonStyle.flat,
                                     color: AppColors.primary,
-                                    shadowColor: const Color(0xFF008899),
+                                    shadowColor: AppColors.primary.withValues(alpha: 0.5),
                                     depth: 2.0,
                                     fullWidth: false,
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                     child: const Text(
                                       'Invite',
                                       style: TextStyle(
-                                        color: Color(0xFF050505),
+                                        color: AppColors.darkText,
                                         fontSize: 11,
                                         fontWeight: FontWeight.w800,
                                       ),
@@ -674,7 +675,7 @@ class _CircleScreenState extends State<CircleScreen> {
                         },
                         style: NeoPopButtonStyle.flat,
                         color: AppColors.primary,
-                        shadowColor: const Color(0xFF008899),
+                        shadowColor: AppColors.primary.withValues(alpha: 0.5),
                         depth: 3.0,
                         fullWidth: true,
                         padding: EdgeInsets.zero,
@@ -682,7 +683,7 @@ class _CircleScreenState extends State<CircleScreen> {
                           child: Text(
                             'Follow',
                             style: TextStyle(
-                              color: Color(0xFF050505),
+                              color: AppColors.darkText,
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
                             ),
@@ -732,7 +733,8 @@ class _CircleScreenState extends State<CircleScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
+      body: GrittyBackground(
+        child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _handleRefresh,
           color: AppColors.primary,
@@ -803,13 +805,13 @@ class _CircleScreenState extends State<CircleScreen> {
                               ),
                               child: Center(
                                 child: Text(
-                                  'Followers',
-                                  style: TextStyle(
+                                  'FOLLOWERS',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                     color: _activeTab == 'followers'
                                         ? AppColors.background
                                         : AppColors.mutedForeground,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ),
@@ -832,13 +834,13 @@ class _CircleScreenState extends State<CircleScreen> {
                               ),
                               child: Center(
                                 child: Text(
-                                  'Following',
-                                  style: TextStyle(
+                                  'FOLLOWING',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                     color: _activeTab == 'my_circle'
                                         ? AppColors.background
                                         : AppColors.mutedForeground,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ),
@@ -861,13 +863,13 @@ class _CircleScreenState extends State<CircleScreen> {
                               ),
                               child: Center(
                                 child: Text(
-                                  'Find Friends',
-                                  style: TextStyle(
+                                  'FIND FRIENDS',
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                     color: _activeTab == 'discover'
                                         ? AppColors.background
                                         : AppColors.mutedForeground,
                                     fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                    fontSize: 10,
                                   ),
                                 ),
                               ),
@@ -917,7 +919,7 @@ class _CircleScreenState extends State<CircleScreen> {
                         fullWidth: false,
                         depth: 4.0,
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        child: const NeoPopButtonText('Sync', color: Color(0xFF050505), fontSize: 12),
+                        child: const NeoPopButtonText('Sync', color: AppColors.darkText, fontSize: 12),
                       ),
                     ],
                   ),
@@ -995,7 +997,7 @@ class _CircleScreenState extends State<CircleScreen> {
                                     decoration: const BoxDecoration(
                                       shape: BoxShape.circle,
                                       gradient: LinearGradient(
-                                        colors: [Color(0xFF00C6FF), Color(0xFF0072FF)],
+                                        colors: [AppColors.primary, AppColors.secondary],
                                       ),
                                     ),
                                     alignment: Alignment.center,
@@ -1036,14 +1038,14 @@ class _CircleScreenState extends State<CircleScreen> {
                                     },
                                     style: NeoPopButtonStyle.flat,
                                     color: isFollowingBack ? Colors.transparent : AppColors.primary,
-                                    shadowColor: isFollowingBack ? Colors.transparent : const Color(0xFF008899),
+                                    shadowColor: isFollowingBack ? Colors.transparent : AppColors.primary.withValues(alpha: 0.5),
                                     depth: isFollowingBack ? 0 : 4.0,
                                     fullWidth: false,
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                     child: Text(
                                       isFollowingBack ? 'Following' : 'Follow',
                                       style: TextStyle(
-                                        color: isFollowingBack ? AppColors.mutedForeground : const Color(0xFF050505),
+                                        color: isFollowingBack ? AppColors.mutedForeground : AppColors.darkText,
                                         fontSize: 12,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -1094,6 +1096,7 @@ class _CircleScreenState extends State<CircleScreen> {
             ),
           ],
         ),
+      ),
       ),
       ),
     );

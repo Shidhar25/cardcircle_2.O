@@ -6,6 +6,7 @@ import '../../../core/services/logger_service.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -159,55 +160,57 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      body: Center(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedBuilder(
-                animation: Listenable.merge([_controller, _glowController]),
-                builder: (context, _) {
-                  final double glow = 0.15 + (_glowController.value * 0.15);
-                  return SizedBox(
-                    width: 260,
-                    height: 260,
-                    child: CustomPaint(
-                      painter: _LogoPainter(
-                        ringProgress: _ringProgress.value,
-                        cardProgress: _cardProgress.value,
-                        person1Progress: _person1Progress.value,
-                        person2Progress: _person2Progress.value,
-                        person3Progress: _person3Progress.value,
-                        glowOpacity: glow,
+      backgroundColor: AppColors.background,
+      body: GrittyBackground(
+        child: Center(
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedBuilder(
+                  animation: Listenable.merge([_controller, _glowController]),
+                  builder: (context, _) {
+                    final double glow = 0.15 + (_glowController.value * 0.15);
+                    return SizedBox(
+                      width: 260,
+                      height: 260,
+                      child: CustomPaint(
+                        painter: _LogoPainter(
+                          ringProgress: _ringProgress.value,
+                          cardProgress: _cardProgress.value,
+                          person1Progress: _person1Progress.value,
+                          person2Progress: _person2Progress.value,
+                          person3Progress: _person3Progress.value,
+                          glowOpacity: glow,
+                        ),
                       ),
-                    ),
-                  );
-                },
-              ),
-              const SizedBox(height: 28),
-              AnimatedBuilder(
-                animation: Listenable.merge([_wordmarkProgress, _cursorController]),
-                builder: (context, _) {
-                  return _TypewriterWordmark(
-                    progress: _wordmarkProgress.value,
-                    showCursor: _wordmarkProgress.value < 1.0 &&
-                        _cursorController.value > 0.5,
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
-              AnimatedBuilder(
-                animation: Listenable.merge([_taglineProgress, _cursorController]),
-                builder: (context, _) {
-                  return _TypewriterTagline(
-                    progress: _taglineProgress.value,
-                    showCursor: _taglineProgress.value < 1.0 &&
-                        _cursorController.value > 0.5,
-                  );
-                },
-              ),
-            ],
+                    );
+                  },
+                ),
+                const SizedBox(height: 28),
+                AnimatedBuilder(
+                  animation: Listenable.merge([_wordmarkProgress, _cursorController]),
+                  builder: (context, _) {
+                    return _TypewriterWordmark(
+                      progress: _wordmarkProgress.value,
+                      showCursor: _wordmarkProgress.value < 1.0 &&
+                          _cursorController.value > 0.5,
+                    );
+                  },
+                ),
+                const SizedBox(height: 14),
+                AnimatedBuilder(
+                  animation: Listenable.merge([_taglineProgress, _cursorController]),
+                  builder: (context, _) {
+                    return _TypewriterTagline(
+                      progress: _taglineProgress.value,
+                      showCursor: _taglineProgress.value < 1.0 &&
+                          _cursorController.value > 0.5,
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -246,9 +249,8 @@ class _LogoPainter extends CustomPainter {
     canvas.drawCircle(center, ringRadius * 1.5, glowPaint);
 
     // ---- Exact C-Ring Formation ----
-    // Starts top-right (~63 degrees), sweeps counter-clockwise to bottom-right (~40 degrees)
-    final double startAngle = -1.1;
-    final double totalSweep = -4.5;
+    const double startAngle = -1.1;
+    const double totalSweep = -4.5;
 
     if (ringProgress > 0) {
       final double sweep = totalSweep * ringProgress;
@@ -473,7 +475,7 @@ class _TypewriterWordmark extends StatelessWidget {
 
     const TextStyle style = TextStyle(
       fontSize: 46,
-      fontFamily: 'Montserrat', // Uses geometric sans if available
+      fontFamily: 'Montserrat', 
       fontWeight: FontWeight.w700,
       color: Colors.white,
       letterSpacing: -0.5,
@@ -532,7 +534,7 @@ class _TypewriterTagline extends StatelessWidget {
       fontSize: 13,
       fontWeight: FontWeight.w600,
       letterSpacing: 2.5,
-      color: Color(0xFFE0E0E0), // Brighter white/grey
+      color: Color(0xFFE0E0E0), 
     );
 
     final double p1 = _lineProgress(0);
@@ -578,7 +580,6 @@ class _Seg {
   const _Seg(this.text, this.color);
 }
 
-// ... Keep your MaintenanceScreen and ForceUpdateScreen classes identical here
 class MaintenanceScreen extends StatelessWidget {
   final String message;
   const MaintenanceScreen({super.key, required this.message});

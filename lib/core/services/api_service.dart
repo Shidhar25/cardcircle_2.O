@@ -5,6 +5,7 @@ import 'logger_service.dart';
 
 class ApiService {
   static const String baseUrl = 'http://13.205.204.182:8080/api/v1';
+  static const String cardsCatalogBaseUrl = 'http://10.105.150.152:8080/api/v1';
 
   static String? _accessToken;
   static String? _refreshToken;
@@ -326,17 +327,17 @@ class ApiService {
     return false;
   }
 
-  // 13. Get all banks
-  static Future<List<String>?> getBanks() async {
+  // 13. Get all banks (catalog)
+  static Future<List<Map<String, dynamic>>?> getBanks() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/banks'),
+        Uri.parse('$cardsCatalogBaseUrl/banks'),
         headers: _headers(),
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['data'];
-        return list.map((item) => item as String).toList();
+        final List<dynamic> list = body['data'] ?? [];
+        return list.map((item) => item as Map<String, dynamic>).toList();
       }
     } catch (e, stack) {
       LoggerService.error('Error fetching banks', e, stack);
@@ -344,28 +345,20 @@ class ApiService {
     return null;
   }
 
-  // 14. Get cards by bank name
+  // 14. Get cards by bank name (catalog)
   static Future<List<Map<String, dynamic>>?> getCardsByBank(String bankName) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/user/cards/browse?banks=${Uri.encodeComponent(bankName)}&limit=200'),
-        headers: _headers(requireAuth: true),
+        Uri.parse('$cardsCatalogBaseUrl/cards?banks=${Uri.encodeComponent(bankName)}&limit=200'),
+        headers: _headers(),
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
-        final rawData = body['data'];
-        List<dynamic> list;
-        if (rawData is Map && rawData.containsKey('cards')) {
-          list = rawData['cards'];
-        } else if (rawData is List) {
-          list = rawData;
-        } else {
-          list = [];
-        }
+        final List<dynamic> list = body['data'] ?? [];
         return list.map((item) => item as Map<String, dynamic>).toList();
       }
     } catch (e, stack) {
-      LoggerService.error('Error fetching cards for $bankName', e, stack);
+      LoggerService.error('Error fetching cards for bank $bankName', e, stack);
     }
     return null;
   }

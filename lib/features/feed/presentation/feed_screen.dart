@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/state/auth_state.dart';
 import '../../circle/state/circle_state.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class FeedScreen extends StatefulWidget {
   final VoidCallback onNavigateToProfile;
@@ -35,7 +36,8 @@ class _FeedScreenState extends State<FeedScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
+      body: GrittyBackground(
+        child: SafeArea(
         child: RefreshIndicator(
           onRefresh: _handleRefresh,
           color: AppColors.primary,
@@ -53,20 +55,18 @@ class _FeedScreenState extends State<FeedScreen> {
                     children: [
                       Row(
                         children: [
-                          const Text(
+                          Text(
                             'Card',
-                            style: TextStyle(
+                            style: Theme.of(context).textTheme.displayLarge?.copyWith(
                               fontSize: 28,
-                              fontWeight: FontWeight.w900,
                               color: Colors.white,
                               letterSpacing: -1.0,
                             ),
                           ),
-                          const Text(
+                          Text(
                             'Circle',
-                            style: TextStyle(
+                            style: Theme.of(context).textTheme.displayLarge?.copyWith(
                               fontSize: 28,
-                              fontWeight: FontWeight.w900,
                               color: AppColors.primary,
                               letterSpacing: -1.0,
                             ),
@@ -123,11 +123,7 @@ class _FeedScreenState extends State<FeedScreen> {
                               height: 42,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                gradient: LinearGradient(
-                                  colors: [AppColors.primary, AppColors.purple],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
+                                color: AppColors.primary,
                                 boxShadow: [
                                   BoxShadow(
                                     color: AppColors.primary.withValues(alpha: 0.3),
@@ -141,7 +137,7 @@ class _FeedScreenState extends State<FeedScreen> {
                               child: Text(
                                 user.initials,
                                 style: const TextStyle(
-                                  color: Colors.white,
+                                  color: AppColors.darkText,
                                   fontSize: 14,
                                   fontWeight: FontWeight.w900,
                                 ),
@@ -163,21 +159,21 @@ class _FeedScreenState extends State<FeedScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Welcome, ${user.name}',
-                        style: const TextStyle(
-                          fontSize: 26,
-                          fontWeight: FontWeight.w700,
+                        'WELCOME, ${user.name.toUpperCase()}',
+                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          letterSpacing: -0.5,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        "Here's your CardCircle !",
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w400,
+                      Text(
+                        "HERE'S YOUR CARDCIRCLE !",
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontSize: 12,
                           color: AppColors.mutedForeground,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: 2.0,
                         ),
                       ),
                     ],
@@ -199,12 +195,12 @@ class _FeedScreenState extends State<FeedScreen> {
                             color: AppColors.card,
                             borderRadius: BorderRadius.circular(18),
                             border: Border.all(
-                              color: const Color(0xFF00FF88).withValues(alpha: 0.25),
+                              color: AppColors.primary.withValues(alpha: 0.25),
                               width: 1.5,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF00FF88).withValues(alpha: 0.05),
+                                color: AppColors.primary.withValues(alpha: 0.05),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -217,13 +213,13 @@ class _FeedScreenState extends State<FeedScreen> {
                                 width: 44,
                                 height: 44,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00FF88).withValues(alpha: 0.15),
+                                  color: AppColors.primary.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 alignment: Alignment.center,
                                 child: const Icon(
                                   Icons.share_rounded,
-                                  color: Color(0xFF00FF88),
+                                  color: AppColors.primary,
                                   size: 22,
                                 ),
                               ),
@@ -433,13 +429,13 @@ class _FeedScreenState extends State<FeedScreen> {
                                   width: 40,
                                   height: 40,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF00FF88).withValues(alpha: 0.15),
+                                    color: AppColors.primary.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   alignment: Alignment.center,
                                   child: const Icon(
                                     Icons.credit_card_outlined,
-                                    color: Color(0xFF00FF88),
+                                    color: AppColors.primary,
                                     size: 20,
                                   ),
                                 ),
@@ -475,6 +471,7 @@ class _FeedScreenState extends State<FeedScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

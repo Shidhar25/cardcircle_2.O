@@ -9,6 +9,7 @@ import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/widgets/mascot_character.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class VerifyOTPScreen extends StatefulWidget {
   const VerifyOTPScreen({super.key});
@@ -253,183 +254,185 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen>
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
-          children: [
-            Align(
-              alignment: Alignment.topLeft,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Text(
-                    '← Back',
-                    style: TextStyle(
-                      color: AppColors.mutedForeground,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
+      body: GrittyBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Align(
+                alignment: Alignment.topLeft,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                    child: Text(
+                      '← Back',
+                      style: TextStyle(
+                        color: AppColors.mutedForeground,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-                    ScaleTransition(
-                      scale: _successScale,
-                      child: MascotCharacter(
-                        size: 150,
-                        mood: _mood,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Verify your number',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 30,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Text.rich(
-                      TextSpan(
-                        text: 'We sent a 6-digit code to\n',
-                        style: const TextStyle(
-                          color: AppColors.mutedForeground,
-                          fontSize: 15,
-                          height: 1.6,
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: 12),
+                      ScaleTransition(
+                        scale: _successScale,
+                        child: MascotCharacter(
+                          size: 150,
+                          mood: _mood,
                         ),
-                        children: [
-                          TextSpan(
-                            text: _phone,
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Verify your number',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text.rich(
+                        TextSpan(
+                          text: 'We sent a 6-digit code to\n',
+                          style: const TextStyle(
+                            color: AppColors.mutedForeground,
+                            fontSize: 15,
+                            height: 1.6,
+                          ),
+                          children: [
+                            TextSpan(
+                              text: _phone,
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 36),
+                      AnimatedBuilder(
+                        animation: _shakeAnimation,
+                        builder: (context, child) {
+                          return Transform.translate(
+                            offset: Offset(_shakeAnimation.value, 0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: List.generate(otpLength, (i) {
+                                final bool hasText = _controllers[i].text.isNotEmpty;
+                                final bool isActive = i == _activeIndex;
+                                return RawKeyboardListener(
+                                  focusNode: FocusNode(),
+                                  onKey: (event) => _handleKeyPress(event, i),
+                                  child: Container(
+                                    width: 48,
+                                    height: 60,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.card,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: _error.isNotEmpty
+                                            ? AppColors.destructive
+                                            : (hasText
+                                                ? AppColors.primary
+                                                : (isActive
+                                                    ? AppColors.primary.withValues(alpha: 0.5)
+                                                    : AppColors.border)),
+                                        width: (hasText || isActive || _error.isNotEmpty) ? 2.0 : 1.0,
+                                      ),
+                                    ),
+                                    child: TextField(
+                                      controller: _controllers[i],
+                                      focusNode: _focusNodes[i],
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      textAlign: TextAlign.center,
+                                      maxLength: 1,
+                                      showCursor: true,
+                                      cursorColor: AppColors.primary,
+                                      style: const TextStyle(
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        counterText: '',
+                                        border: InputBorder.none,
+                                        contentPadding: EdgeInsets.zero,
+                                      ),
+                                      onChanged: (text) => _handleInput(text, i),
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ),
+                          );
+                        },
+                      ),
+                      if (_error.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: Text(
+                            _error,
                             style: const TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w600,
+                              color: AppColors.destructive,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
                             ),
                           ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 36),
-                    AnimatedBuilder(
-                      animation: _shakeAnimation,
-                      builder: (context, child) {
-                        return Transform.translate(
-                          offset: Offset(_shakeAnimation.value, 0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: List.generate(otpLength, (i) {
-                              final bool hasText = _controllers[i].text.isNotEmpty;
-                              final bool isActive = i == _activeIndex;
-                              return RawKeyboardListener(
-                                focusNode: FocusNode(),
-                                onKey: (event) => _handleKeyPress(event, i),
-                                child: Container(
-                                  width: 48,
-                                  height: 60,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.card,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: _error.isNotEmpty
-                                          ? const Color(0xFFFF4757)
-                                          : (hasText
-                                              ? AppColors.primary
-                                              : (isActive
-                                                  ? AppColors.primary.withValues(alpha: 0.5)
-                                                  : AppColors.border)),
-                                      width: (hasText || isActive || _error.isNotEmpty) ? 2.0 : 1.0,
-                                    ),
-                                  ),
-                                  child: TextField(
-                                    controller: _controllers[i],
-                                    focusNode: _focusNodes[i],
-                                    keyboardType: TextInputType.number,
-                                    inputFormatters: [
-                                      FilteringTextInputFormatter.digitsOnly,
-                                    ],
-                                    textAlign: TextAlign.center,
-                                    maxLength: 1,
-                                    showCursor: true,
-                                    cursorColor: AppColors.primary,
-                                    style: const TextStyle(
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                    decoration: const InputDecoration(
-                                      counterText: '',
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.zero,
-                                    ),
-                                    onChanged: (text) => _handleInput(text, i),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ),
-                        );
-                      },
-                    ),
-                    if (_error.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 8.0),
-                        child: Text(
-                          _error,
-                          style: const TextStyle(
-                            color: Color(0xFFFF4757),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w400,
-                          ),
                         ),
-                      ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Demo: enter any 6 digits to continue',
-                      style: TextStyle(
-                        color: AppColors.mutedForeground,
-                        fontSize: 12,
-                        fontStyle: FontStyle.italic,
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                    NeoPopButton.primary(
-                      onPressed: _verifyOtp,
-                      isLoading: _isLoading,
-                      enabled: filled,
-                      child: NeoPopButtonText(
-                        'Verify OTP',
-                        color: filled ? const Color(0xFF050505) : AppColors.mutedForeground,
-                        icon: Icons.verified_rounded,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    NeoPopButton.link(
-                      onPressed: _timer == 0 ? _handleResend : null,
-                      enabled: _timer == 0,
-                      child: Text(
-                        _timer > 0 ? 'Resend OTP in ${_timer}s' : 'Resend OTP',
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Demo: enter any 6 digits to continue',
                         style: TextStyle(
-                          color: _timer == 0 ? AppColors.primary : AppColors.mutedForeground,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
+                          color: AppColors.mutedForeground,
+                          fontSize: 12,
+                          fontStyle: FontStyle.italic,
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 32),
-                  ],
+                      const SizedBox(height: 24),
+                      NeoPopButton.primary(
+                        onPressed: _verifyOtp,
+                        isLoading: _isLoading,
+                        enabled: filled,
+                        child: NeoPopButtonText(
+                          'Verify OTP',
+                          color: filled ? AppColors.darkText : AppColors.mutedForeground,
+                          icon: Icons.verified_rounded,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      NeoPopButton.link(
+                        onPressed: _timer == 0 ? _handleResend : null,
+                        enabled: _timer == 0,
+                        child: Text(
+                          _timer > 0 ? 'Resend OTP in ${_timer}s' : 'Resend OTP',
+                          style: TextStyle(
+                            color: _timer == 0 ? AppColors.primary : AppColors.mutedForeground,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

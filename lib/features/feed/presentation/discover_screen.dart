@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
 import '../state/feed_state.dart';
 import '../../../shared/models/hack.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
@@ -68,8 +69,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
+      body: GrittyBackground(
+        child: SafeArea(
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Title Header
@@ -146,15 +148,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'My Hacks',
-                            style: TextStyle(
+                            'MY HACKS',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
                               color: _activeTab == 'my_hacks'
                                   ? AppColors.primary
                                   : AppColors.mutedForeground,
                               fontWeight: _activeTab == 'my_hacks'
                                   ? FontWeight.w700
                                   : FontWeight.w500,
-                              fontSize: 15,
+                              fontSize: 13,
                             ),
                           ),
                           if (_activeTab == 'my_hacks') ...[
@@ -163,7 +165,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               height: 3,
                               width: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF00FF88),
+                                color: AppColors.primary,
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -184,15 +186,15 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'Circle Hacks',
-                            style: TextStyle(
+                            'CIRCLE HACKS',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
                               color: _activeTab == 'circle_hacks'
                                   ? AppColors.primary
                                   : AppColors.mutedForeground,
                               fontWeight: _activeTab == 'circle_hacks'
                                   ? FontWeight.w700
                                   : FontWeight.w500,
-                              fontSize: 15,
+                              fontSize: 13,
                             ),
                           ),
                           if (_activeTab == 'circle_hacks') ...[
@@ -201,7 +203,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               height: 3,
                               width: 36,
                               decoration: BoxDecoration(
-                                color: const Color(0xFF00FF88),
+                                color: AppColors.primary,
                                 borderRadius: BorderRadius.circular(2),
                               ),
                             ),
@@ -308,8 +310,9 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildHackCard(BuildContext context, Hack hack, FeedState feedState) {
     return Container(
@@ -513,23 +516,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               children: [
                 // Hack Name
                 Text(
-                  hack.name,
-                  style: const TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w700,
+                  hack.name.toUpperCase(),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -0.3,
+                    letterSpacing: -0.5,
                   ),
                 ),
                 const SizedBox(height: 4),
 
                 // Card Name Subtitle
                 Text(
-                  hack.cardName,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+                  hack.cardName.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: AppColors.mutedForeground,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -615,312 +617,4 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     );
   }
 
-  void _showHackDetailsModal(BuildContext context, Hack hack) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.card,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.82,
-          maxChildSize: 0.95,
-          minChildSize: 0.5,
-          builder: (context, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Handle indicator
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: AppColors.border,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Category & Savings row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.elevated,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Text(
-                          hack.category.toUpperCase(),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding:
-                            const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: AppColors.green.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.bolt,
-                                size: 14, color: AppColors.green),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Save ${hack.savings}',
-                              style: const TextStyle(
-                                color: AppColors.green,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Hack Name
-                  Text(
-                    hack.name,
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  // Heading
-                  Text(
-                    hack.heading,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: Colors.white70,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Applicable Cards
-                  if (hack.cards.isNotEmpty) ...[
-                    const Text(
-                      'Applicable Card(s)',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: hack.cards.map((c) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.elevated,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: AppColors.border),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.credit_card_rounded,
-                                  size: 14, color: AppColors.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                c,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Steps section
-                  if (hack.steps.isNotEmpty) ...[
-                    const Text(
-                      'Steps to Redeem',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    ...hack.steps.map((s) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: AppColors.elevated,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: AppColors.border),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              s.icon,
-                              style: const TextStyle(fontSize: 22),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        s.heading,
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      Text(
-                                        s.name,
-                                        style: const TextStyle(
-                                          fontSize: 11,
-                                          color: AppColors.mutedForeground,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    s.description,
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.white70,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // Things to Note section
-                  if (hack.thingsToNote.isNotEmpty) ...[
-                    const Text(
-                      'Things to Note',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(
-                            color: Colors.amber.withValues(alpha: 0.3)),
-                      ),
-                      child: Column(
-                        children: hack.thingsToNote.map((note) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8.0),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text('• ',
-                                    style: TextStyle(
-                                        color: Colors.amber,
-                                        fontWeight: FontWeight.bold)),
-                                Expanded(
-                                  child: Text(
-                                    note,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white70,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-
-                  // Availed By / Circle Detail
-                  if (hack.circledetail.isNotEmpty ||
-                      hack.availedby.isNotEmpty) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.people_alt_rounded,
-                              size: 18, color: AppColors.primary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              hack.circledetail.isNotEmpty
-                                  ? hack.circledetail
-                                  : hack.availedby,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
 }

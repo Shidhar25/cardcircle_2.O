@@ -1,7 +1,3 @@
-import 'dart:async';
-import 'dart:math' as math;
-import 'package:flutter/material.dart';
-
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
@@ -158,7 +154,7 @@ class _MascotCharacterState extends State<MascotCharacter> with TickerProviderSt
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: _emotionColor.withOpacity(0.15),
+                    color: _emotionColor.withValues(alpha: 0.15),
                     blurRadius: 100,
                     spreadRadius: 20,
                   ),
@@ -189,11 +185,11 @@ class _MascotCharacterState extends State<MascotCharacter> with TickerProviderSt
                     stops: const [0.0, 0.4, 1.0],
                   ),
                   boxShadow: [
-                    BoxShadow(color: _emotionColor.withOpacity(0.5), blurRadius: 25, spreadRadius: -2),
-                    BoxShadow(color: _emotionColor.withOpacity(0.2), blurRadius: 60, spreadRadius: 15),
+                    BoxShadow(color: _emotionColor.withValues(alpha: 0.5), blurRadius: 25, spreadRadius: -2),
+                    BoxShadow(color: _emotionColor.withValues(alpha: 0.2), blurRadius: 60, spreadRadius: 15),
                   ],
                   border: Border.all(
-                    color: Color.lerp(Colors.white, _emotionColor, 0.3)!.withOpacity(0.3),
+                    color: Color.lerp(Colors.white, _emotionColor, 0.3)!.withValues(alpha: 0.3),
                     width: 1.5,
                   ),
                 ),
@@ -208,11 +204,11 @@ class _MascotCharacterState extends State<MascotCharacter> with TickerProviderSt
                             begin: Alignment(-1.5 + (_floatAnimation.value / 10), -1.0),
                             end: Alignment(1.5 + (_floatAnimation.value / 10), 1.0),
                             colors: [
-                              Colors.white.withOpacity(0.0),
-                              Colors.deepPurpleAccent.withOpacity(0.2),
-                              Colors.cyanAccent.withOpacity(0.3),
-                              Colors.amberAccent.withOpacity(0.2),
-                              Colors.white.withOpacity(0.0),
+                              Colors.white.withValues(alpha: 0.0),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                              Colors.cyanAccent.withValues(alpha: 0.3),
+                              Colors.amberAccent.withValues(alpha: 0.2),
+                              Colors.white.withValues(alpha: 0.0),
                             ],
                             stops: const [0.1, 0.4, 0.5, 0.6, 0.9],
                           ).createShader(bounds),

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
@@ -62,24 +61,7 @@ class CardCircleApp extends StatelessWidget {
       title: 'CardCircle',
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: AppColors.background,
-        primaryColor: AppColors.primary,
-        colorScheme: const ColorScheme.dark(
-          primary: AppColors.primary,
-          secondary: AppColors.purple,
-          surface: AppColors.card,
-        ),
-        fontFamily: 'Gilroy',
-        textTheme: GoogleFonts.interTextTheme(
-          ThemeData.dark().textTheme,
-        ).apply(
-          bodyColor: Colors.white,
-          displayColor: Colors.white,
-          fontFamily: 'Gilroy',
-        ),
-      ),
+      darkTheme: AppTheme.darkTheme,
       initialRoute: '/',
       routes: {
         '/': (context) => const SplashScreen(),

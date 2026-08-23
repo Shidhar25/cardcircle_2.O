@@ -1,0 +1,8 @@
+- [x] Update `pubspec.yaml` to register SVG assets
+- [x] Refactor `lib/shared/widgets/neo_pop_button.dart`
+    - [x] Import `app_theme.dart`
+    - [x] Align colors with Lime/Periwinkle palette
+    - [x] Update typography to use Space Mono / Syne
+- [x] Verify Discover SVG visibility
+- [x] Verify NeoPopButton theming
+- [x] Create walkthrough artifact

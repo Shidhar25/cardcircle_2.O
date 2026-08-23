@@ -4,6 +4,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
+import '../../../shared/widgets/catalog_card_visual.dart';
 
 class SelectCardsScreen extends StatefulWidget {
   const SelectCardsScreen({super.key});
@@ -13,8 +15,8 @@ class SelectCardsScreen extends StatefulWidget {
 }
 
 class _SelectCardsScreenState extends State<SelectCardsScreen> {
-  List<String> _banks = [];
-  String? _selectedBank;
+  List<Map<String, dynamic>> _banks = [];
+  String? _selectedBankId;
   List<Map<String, dynamic>> _availableCards = [];
   bool _fromProfile = false;
   bool _initialized = false;
@@ -48,8 +50,12 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       setState(() {
         if (list != null && list.isNotEmpty) {
           _banks = list;
-          _selectedBank = list.first;
-          _fetchCardsForBank(list.first);
+          final first = list.first;
+          _selectedBankId = first['id'] as String?;
+          final firstName = first['name'] as String?;
+          if (firstName != null) {
+            _fetchCardsForBank(firstName);
+          }
         }
         _loadingBanks = false;
       });
@@ -78,8 +84,9 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
 
   void _toggleCard(Map<String, dynamic> card) {
     final cardId = card['id'] ?? '';
-    final bankName = card['bank'] ?? '';
-    final cardName = card['card_name'] ?? '';
+    final bankId = card['bank_id'] ?? '';
+    final cardInfo = (card['card'] as Map?)?.cast<String, dynamic>() ?? {};
+    final cardName = cardInfo['name'] ?? '';
 
     setState(() {
       if (_isCardSelected(cardId)) {
@@ -87,7 +94,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       } else {
         _selectedCards.add({
           'card_id': cardId,
-          'bank_name': bankName,
+          'bank_name': bankId,
           'card_name': cardName,
           'nickname': cardName,
           'is_primary': false,
@@ -149,8 +156,9 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
+      body: GrittyBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -175,7 +183,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                           width: 10,
                           height: 10,
                           decoration: const BoxDecoration(
-                            color: AppColors.green,
+                            color: AppColors.secondary,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -185,7 +193,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                           height: 3,
                           margin: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.green,
+                            color: AppColors.secondary,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -194,7 +202,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                           width: 10,
                           height: 10,
                           decoration: const BoxDecoration(
-                            color: AppColors.green,
+                            color: AppColors.secondary,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -204,7 +212,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                           height: 3,
                           margin: const EdgeInsets.symmetric(horizontal: 6),
                           decoration: BoxDecoration(
-                            color: AppColors.green,
+                            color: AppColors.secondary,
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -284,24 +292,25 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                   itemCount: _banks.length,
                   itemBuilder: (context, index) {
                     final bank = _banks[index];
-                    final isSelected = _selectedBank == bank;
+                    final bankId = bank['id'] as String?;
+                    final bankName = (bank['name'] as String?) ?? '';
+                    final logoUrl = bank['logo'] as String?;
+                    final isSelected = _selectedBankId == bankId;
                     return Padding(
                       padding: const EdgeInsets.only(right: 8.0),
                       child: ChoiceChip(
-                        label: Text(
-                          bank,
-                          style: TextStyle(
-                            color: isSelected ? Colors.black : Colors.white,
-                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                          ),
+                        label: BankLogoChipContent(
+                          bankName: bankName,
+                          logoUrl: logoUrl,
+                          isSelected: isSelected,
                         ),
                         selected: isSelected,
                         onSelected: (selected) {
-                          if (selected) {
+                          if (selected && bankId != null) {
                             setState(() {
-                              _selectedBank = bank;
+                              _selectedBankId = bankId;
                             });
-                            _fetchCardsForBank(bank);
+                            _fetchCardsForBank(bankName);
                           }
                         },
                         selectedColor: AppColors.primary,
@@ -330,67 +339,28 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                             style: TextStyle(color: AppColors.mutedForeground),
                           ),
                         )
-                      : GridView.builder(
+                      : ListView.separated(
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 12,
-                            childAspectRatio: 1.5,
-                          ),
                           itemCount: _availableCards.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 12),
                           itemBuilder: (context, index) {
                             final card = _availableCards[index];
                             final id = card['id'] ?? '';
-                            final cardName = card['card_name'] ?? '';
-                            final network = card['network'] ?? '';
                             final isSelected = _isCardSelected(id);
 
                             return GestureDetector(
                               onTap: () => _toggleCard(card),
                               child: AnimatedContainer(
                                 duration: const Duration(milliseconds: 180),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? AppColors.primary.withValues(alpha: 0.1)
-                                      : AppColors.card,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isSelected ? AppColors.primary : AppColors.border,
-                                    width: isSelected ? 2.0 : 1.0,
+                                child: AspectRatio(
+                                  // Matches the catalog's card artwork ratio
+                                  // (500x317) so BoxFit.cover fills the slot
+                                  // exactly with no cropping or letterboxing.
+                                  aspectRatio: 500 / 317,
+                                  child: CatalogCardVisual(
+                                    cardData: card,
+                                    isSelected: isSelected,
                                   ),
-                                ),
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          network.toUpperCase(),
-                                          style: TextStyle(
-                                            color: isSelected ? AppColors.primary : AppColors.mutedForeground,
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                        ),
-                                        if (isSelected)
-                                          const Icon(Icons.check_circle, color: AppColors.primary, size: 18),
-                                      ],
-                                    ),
-                                    const Spacer(),
-                                    Text(
-                                      cardName,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ],
                                 ),
                               ),
                             );
@@ -404,14 +374,16 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                 isLoading: _saving,
                 enabled: _selectedCards.isNotEmpty && !_saving,
                 depth: 6.0,
-                child: const NeoPopButtonText(
+                child: NeoPopButtonText(
                   'Finish Setup',
+                  color: _selectedCards.isNotEmpty && !_saving ? AppColors.darkText : Colors.black,
                   icon: Icons.check_circle_rounded,
                 ),
               ),
             ),
           ],
         ),
+      ),
       ),
     );
   }

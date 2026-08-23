@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../../core/theme/app_theme.dart';
 import 'feed_screen.dart';
 import 'discover_screen.dart';
@@ -63,9 +64,10 @@ class _TabsLayoutState extends State<TabsLayout> {
           decoration: BoxDecoration(
             color: AppColors.card,
             borderRadius: BorderRadius.circular(40), // Premium curvy pill shape
+            border: Border.all(color: AppColors.border, width: 1),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.15),
+                color: Colors.black.withValues(alpha: 0.15),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               ),
@@ -74,14 +76,14 @@ class _TabsLayoutState extends State<TabsLayout> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              _buildNavItem(
+            _buildNavItem(
                 index: 0,
                 icon: Icons.home_filled,
                 label: 'Feed',
               ),
               _buildNavItem(
                 index: 1,
-                icon: Icons.explore_rounded,
+                svgAsset: 'assets/icons/discover.svg',
                 label: 'Discover',
               ),
               _buildNavItem(
@@ -104,7 +106,8 @@ class _TabsLayoutState extends State<TabsLayout> {
   /// Builds individual animated nav items
   Widget _buildNavItem({
     required int index,
-    required IconData icon,
+    IconData? icon,
+    String? svgAsset,
     required String label,
   }) {
     final bool isSelected = _currentIndex == index;
@@ -121,23 +124,34 @@ class _TabsLayoutState extends State<TabsLayout> {
               scale: isSelected ? 1.25 : 1.0,
               duration: const Duration(milliseconds: 300),
               curve: Curves.easeOutBack,
-              child: Icon(
-                icon,
-                color: isSelected ? AppColors.primary : AppColors.mutedForeground,
-                size: 24,
-              ),
+              child: svgAsset != null
+                  ? SvgPicture.asset(
+                      svgAsset,
+                      colorFilter: ColorFilter.mode(
+                        isSelected ? AppColors.primary : AppColors.mutedForeground,
+                        BlendMode.srcIn,
+                      ),
+                      width: 24,
+                      height: 24,
+                    )
+                  : Icon(
+                      icon,
+                      color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                      size: 24,
+                    ),
             ),
             const SizedBox(height: 4),
             // Smooth text transition (bolder and slightly larger when active)
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              style: TextStyle(
-                fontSize: isSelected ? 11 : 10,
+              style: Theme.of(context).textTheme.labelSmall!.copyWith(
+                fontSize: 10,
                 fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected ? AppColors.primary : AppColors.mutedForeground,
+                letterSpacing: 0.5,
               ),
-              child: Text(label),
+              child: Text(label.toUpperCase()),
             ),
           ],
         ),

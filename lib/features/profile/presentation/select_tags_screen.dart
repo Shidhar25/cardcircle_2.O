@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class SelectTagsScreen extends StatefulWidget {
   const SelectTagsScreen({super.key});
@@ -105,8 +106,9 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: Column(
+      body: GrittyBackground(
+        child: SafeArea(
+          child: Column(
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
@@ -123,7 +125,7 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
                         width: 10,
                         height: 10,
                         decoration: const BoxDecoration(
-                          color: AppColors.green,
+                          color: AppColors.secondary,
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -133,7 +135,7 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
                         height: 3,
                         margin: const EdgeInsets.symmetric(horizontal: 6),
                         decoration: BoxDecoration(
-                          color: AppColors.green,
+                          color: AppColors.secondary,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -312,14 +314,16 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
                 isLoading: _saving,
                 enabled: _selectedCategoryIds.isNotEmpty && !_saving,
                 depth: 6.0,
-                child: const NeoPopButtonText(
+                child: NeoPopButtonText(
                   'Next Step',
+                  color: _selectedCategoryIds.isNotEmpty && !_saving ? AppColors.darkText : Colors.black,
                   icon: Icons.arrow_forward_rounded,
                 ),
               ),
             ),
           ],
         ),
+      ),
       ),
     );
   }

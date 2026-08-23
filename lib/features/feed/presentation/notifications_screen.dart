@@ -5,6 +5,7 @@ import '../../../core/services/api_service.dart';
 import '../../circle/state/circle_state.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -245,9 +246,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
+        title: Text(
+          'NOTIFICATIONS',
+          style: Theme.of(context).textTheme.displaySmall?.copyWith(
             color: Colors.white,
             fontSize: 20,
             fontWeight: FontWeight.w900,
@@ -256,7 +257,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         ),
         centerTitle: true,
       ),
-      body: RefreshIndicator(
+      body: GrittyBackground(
+        child: RefreshIndicator(
         onRefresh: () async {
           await circleState.fetchIncomingRequests();
           await _fetchPushNotifications();
@@ -515,6 +517,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       ],
                     ],
                   ),
+        ),
       ),
     );
   }

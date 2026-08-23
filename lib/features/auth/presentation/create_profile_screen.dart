@@ -6,6 +6,7 @@ import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class CreateProfileScreen extends StatefulWidget {
   const CreateProfileScreen({super.key});
@@ -106,7 +107,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
 
     String formatted = '';
     if (clean.length > 4) {
-      formatted = '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, mathMin(clean.length, 8))}';
+      formatted = '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, _mathMin(clean.length, 8))}';
     } else if (clean.length > 2) {
       formatted = '${clean.substring(0, 2)} / ${clean.substring(2)}';
     } else {
@@ -121,7 +122,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
     }
   }
 
-  int mathMin(int a, int b) => a < b ? a : b;
+  int _mathMin(int a, int b) => a < b ? a : b;
 
   String _safeFirstChar(String s) {
     if (s.isEmpty) return '';
@@ -165,7 +166,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
       _errors['name'] = 'Enter your full name.';
     }
     if (username.isEmpty || !RegExp(r'^[a-zA-Z0-9_]{3,24}$').hasMatch(username)) {
-      _errors['username'] = '3–24 chars: letters, numbers, _';
+      _errors['username'] = '3-24 chars: letters, numbers, _';
     }
     if (dob.replaceAll(RegExp(r'\D'), '').length < 8) {
       _errors['dob'] = 'Enter a valid date of birth.';
@@ -253,234 +254,221 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
-          child: Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Dot 1 (Active)
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  // Line 1
-                  Container(
-                    width: 30,
-                    height: 3,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  // Dot 2 (Inactive)
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.border,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  // Line 2
-                  Container(
-                    width: 30,
-                    height: 3,
-                    margin: const EdgeInsets.symmetric(horizontal: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.border,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                  // Dot 3 (Inactive)
-                  Container(
-                    width: 10,
-                    height: 10,
-                    decoration: const BoxDecoration(
-                      color: AppColors.border,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Step 1 of 3 — Create Profile',
-                style: TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 18),
-              const Text(
-                'Your CardCircle\nprofile',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w700,
-                  color: Colors.white,
-                  letterSpacing: -0.6,
-                  height: 1.25,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'This is how the community sees you',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.mutedForeground,
-                ),
-              ),
-              const SizedBox(height: 28),
-              ScaleTransition(
-                scale: _avatarScale,
-                child: GestureDetector(
-                  onTap: _tapAvatar,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    clipBehavior: Clip.none,
-                    children: [
-                      Container(
-                        width: 96,
-                        height: 96,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: LinearGradient(
-                            colors: _avatarColors[_avatarColorIndex],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          _getInitials(),
-                          style: const TextStyle(
-                            color: Color(0xFF050505),
-                            fontSize: 34,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+      body: GrittyBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          width: 28,
-                          height: 28,
+                    ),
+                    Container(
+                      width: 30,
+                      height: 3,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: AppColors.border,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Container(
+                      width: 30,
+                      height: 3,
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      decoration: BoxDecoration(
+                        color: AppColors.border,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    Container(
+                      width: 10,
+                      height: 10,
+                      decoration: const BoxDecoration(
+                        color: AppColors.border,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'STEP 1 OF 3 - CREATE PROFILE',
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'YOUR CARDCIRCLE\nPROFILE',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                    fontSize: 32,
+                    color: Colors.white,
+                    height: 1.1,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'This is how the community sees you',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedForeground,
+                  ),
+                ),
+                const SizedBox(height: 28),
+                ScaleTransition(
+                  scale: _avatarScale,
+                  child: GestureDetector(
+                    onTap: _tapAvatar,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      clipBehavior: Clip.none,
+                      children: [
+                        Container(
+                          width: 96,
+                          height: 96,
                           decoration: BoxDecoration(
-                            color: AppColors.card,
                             shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.border, width: 2),
+                            gradient: LinearGradient(
+                              colors: _avatarColors[_avatarColorIndex],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
                           ),
                           alignment: Alignment.center,
-                          child: const Text(
-                            '✏️',
-                            style: TextStyle(fontSize: 13),
+                          child: Text(
+                            _getInitials(),
+                            style: const TextStyle(
+                              color: AppColors.darkText,
+                              fontSize: 34,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            width: 28,
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: AppColors.card,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.border, width: 2),
+                            ),
+                            alignment: Alignment.center,
+                            child: const Icon(
+                              Icons.edit_rounded,
+                              size: 14,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'TAP TO CHANGE COLOR',
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9),
+                ),
+                const SizedBox(height: 28),
+                Form(
+                  key: _formKey,
+                  child: Column(
+                    children: [
+                      _buildField(
+                        label: 'Full Name',
+                        placeholder: 'Shridhar Sharma',
+                        controller: _nameController,
+                        errorKey: 'name',
+                        textCapitalization: TextCapitalization.words,
+                      ),
+                      _buildField(
+                        label: 'Username',
+                        placeholder: 'shridharsharma',
+                        controller: _usernameController,
+                        errorKey: 'username',
+                        prefix: '@',
+                        textCapitalization: TextCapitalization.none,
+                        hint: 'Letters, numbers, underscores only',
+                        suffix: _isCheckingUsername
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                ),
+                              )
+                            : (_isUsernameUnique == null
+                                ? null
+                                : (_isUsernameUnique!
+                                    ? const Icon(Icons.check_circle_outline, color: AppColors.primary, size: 20)
+                                    : const Icon(Icons.error_outline, color: AppColors.destructive, size: 20))),
+                      ),
+                      _buildField(
+                        label: 'Date of Birth',
+                        placeholder: 'DD / MM / YYYY',
+                        controller: _dobController,
+                        errorKey: 'dob',
+                        keyboardType: TextInputType.number,
+                        hint: 'Must be 18+ to join',
+                      ),
+                      _buildField(
+                        label: 'Email Address',
+                        placeholder: 'shridhar@example.com',
+                        controller: _emailController,
+                        errorKey: 'email',
+                        keyboardType: TextInputType.emailAddress,
+                        textCapitalization: TextCapitalization.none,
+                      ),
+                      _buildField(
+                        label: 'Phone Number',
+                        placeholder: '',
+                        controller: TextEditingController(text: _phone),
+                        errorKey: 'phone',
+                        enabled: false,
                       ),
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Tap to change color',
-                style: TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 12,
+                const SizedBox(height: 16),
+                NeoPopButton(
+                  onPressed: _saving ? null : _handleSubmit,
+                  style: NeoPopButtonStyle.elevated,
+                  isLoading: _saving,
+                  gradient: const LinearGradient(
+                    colors: [AppColors.secondary, AppColors.purple],
+                    begin: Alignment.centerLeft,
+                    end: Alignment.centerRight,
+                  ),
+                  shadowColor: AppColors.secondary.withValues(alpha: 0.5),
+                  depth: 7.0,
+                  child: const NeoPopButtonText(
+                    'Complete Profile',
+                    icon: Icons.rocket_launch_rounded,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 28),
-              Form(
-                key: _formKey,
-                child: Column(
-                  children: [
-                    _buildField(
-                      label: 'Full Name',
-                      placeholder: 'Shridhar Sharma',
-                      controller: _nameController,
-                      errorKey: 'name',
-                      textCapitalization: TextCapitalization.words,
-                    ),
-                    _buildField(
-                      label: 'Username',
-                      placeholder: 'shridharsharma',
-                      controller: _usernameController,
-                      errorKey: 'username',
-                      prefix: '@',
-                      textCapitalization: TextCapitalization.none,
-                      hint: 'Letters, numbers, underscores only',
-                      suffix: _isCheckingUsername
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 1.5,
-                                valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                              ),
-                            )
-                          : (_isUsernameUnique == null
-                              ? null
-                              : (_isUsernameUnique!
-                                  ? const Icon(Icons.check_circle_outline, color: Colors.green, size: 20)
-                                  : const Icon(Icons.error_outline, color: Colors.red, size: 20))),
-                    ),
-                    _buildField(
-                      label: 'Date of Birth',
-                      placeholder: 'DD / MM / YYYY',
-                      controller: _dobController,
-                      errorKey: 'dob',
-                      keyboardType: TextInputType.number,
-                      hint: 'Must be 18+ to join',
-                    ),
-                    _buildField(
-                      label: 'Email Address',
-                      placeholder: 'shridhar@example.com',
-                      controller: _emailController,
-                      errorKey: 'email',
-                      keyboardType: TextInputType.emailAddress,
-                      textCapitalization: TextCapitalization.none,
-                    ),
-                    _buildField(
-                      label: 'Phone Number',
-                      placeholder: '',
-                      controller: TextEditingController(text: _phone),
-                      errorKey: 'phone',
-                      enabled: false,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              NeoPopButton(
-                onPressed: _saving ? null : _handleSubmit,
-                style: NeoPopButtonStyle.elevated,
-                isLoading: _saving,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF00D4FF), Color(0xFF8B5CF6)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                ),
-                shadowColor: const Color(0xFF004466),
-                depth: 7.0,
-                child: const NeoPopButtonText(
-                  'Complete Profile',
-                  icon: Icons.rocket_launch_rounded,
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
       ),
@@ -509,12 +497,10 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            label,
-            style: const TextStyle(
+            label.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: Colors.white,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.3,
+              fontWeight: FontWeight.bold,
             ),
           ),
           const SizedBox(height: 8),
@@ -536,7 +522,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: hasError
-                      ? const Color(0xFFFF4757)
+                      ? AppColors.destructive
                       : (isFocused ? AppColors.primary : AppColors.border),
                   width: isFocused ? 2.0 : 1.0,
                 ),
@@ -561,14 +547,13 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
                       keyboardType: keyboardType,
                       textCapitalization: textCapitalization,
                       enabled: enabled,
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: enabled ? Colors.white : Colors.white.withValues(alpha: 0.55),
-                        fontSize: 16,
                       ),
                       decoration: InputDecoration(
                         hintText: placeholder,
-                        hintStyle: const TextStyle(
-                          color: AppColors.mutedForeground,
+                        hintStyle: TextStyle(
+                          color: AppColors.mutedForeground.withValues(alpha: 0.5),
                         ),
                         border: InputBorder.none,
                         contentPadding: EdgeInsets.zero,
@@ -589,7 +574,7 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
               child: Text(
                 errorMsg,
                 style: const TextStyle(
-                  color: Color(0xFFFF4757),
+                  color: AppColors.destructive,
                   fontSize: 12,
                 ),
               ),
@@ -598,11 +583,8 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
             Padding(
               padding: const EdgeInsets.only(top: 4.0),
               child: Text(
-                hint,
-                style: const TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 11,
-                ),
+                hint.toUpperCase(),
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 8),
               ),
             ),
         ],

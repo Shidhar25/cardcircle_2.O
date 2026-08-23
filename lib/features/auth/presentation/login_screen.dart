@@ -3,6 +3,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
 import '../../../shared/widgets/mascot_character.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -77,7 +78,7 @@ class _LoginScreenState extends State<LoginScreen>
     if (_isLoading) return;
     if (!_isValidPhone()) {
       setState(() {
-        _errorText = 'Enter a valid 10-digit Indian mobile number.';
+        _errorText = 'Enter a valid Indian mobile number.';
       });
       _triggerShake();
       return;
@@ -109,7 +110,7 @@ class _LoginScreenState extends State<LoginScreen>
       }
     } else {
       setState(() {
-        _errorText = 'Failed to send OTP. Please check backend connection.';
+        _errorText = 'Failed to send OTP. Please check your connection.';
       });
       _triggerShake();
     }
@@ -125,259 +126,151 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   Widget build(BuildContext context) {
-    final double sw = MediaQuery.of(context).size.width;
     final bool valid = _isValidPhone();
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: Stack(
-        children: [
-          Positioned(
-            top: -100,
-            left: sw / 2 - 250,
-            child: Container(
-              width: 500,
-              height: 500,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF00D4FF).withValues(alpha: 0.07),
-                    const Color(0xFF8B5CF6).withValues(alpha: 0.03),
-                    Colors.transparent,
-                  ],
+      body: GrittyBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 24.0),
+            child: Column(
+              children: [
+                const SizedBox(height: 24),
+                const Center(
+                  child: MascotCharacter(
+                    size: 140,
+                    mood: 'idle',
+                  ),
                 ),
-              ),
-            ),
-          ),
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Column(
-                children: [
-                  const SizedBox(height: 24),
-                  const Center(
-                    child: MascotCharacter(
-                      size: 140,
-                      mood: 'idle',
-                    ),
+                const SizedBox(height: 8),
+                Text(
+                  'Welcome to\nCardCircle'.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.displayLarge?.copyWith(
+                    fontSize: 32,
+                    color: Colors.white,
+                    height: 1.1,
                   ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Welcome to\nCardCircle',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                      letterSpacing: -0.8,
-                      height: 1.23,
-                    ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Enter your mobile number to continue',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.mutedForeground,
                   ),
-                  const SizedBox(height: 10),
-                  const Text(
-                    'Enter your mobile number to continue',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w400,
-                      color: AppColors.mutedForeground,
-                    ),
-                  ),
-                  const SizedBox(height: 36),
-                  AnimatedBuilder(
-                    animation: _shakeAnimation,
-                    builder: (context, child) {
-                      return Transform.translate(
-                        offset: Offset(_shakeAnimation.value, 0),
-                        child: Container(
-                          height: 62,
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: _errorText.isNotEmpty
-                                  ? const Color(0xFFFF4757)
-                                  : (_isFocused
-                                      ? AppColors.primary
-                                      : AppColors.border),
-                              width: (_isFocused || _errorText.isNotEmpty) ? 2.0 : 1.5,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                decoration: const BoxDecoration(
-                                  border: Border(
-                                    right: BorderSide(
-                                      color: AppColors.border,
-                                      width: 1,
-                                    ),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: const [
-                                    Text(
-                                      '🇮🇳',
-                                      style: TextStyle(fontSize: 22),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(
-                                      '+91',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 17,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: TextField(
-                                  controller: _phoneController,
-                                  focusNode: _focusNode,
-                                  keyboardType: TextInputType.phone,
-                                  maxLength: 10,
-                                  autofocus: true,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w500,
-                                    letterSpacing: 1.5,
-                                  ),
-                                  decoration: const InputDecoration(
-                                    hintText: '98765 43210',
-                                    hintStyle: TextStyle(
-                                      color: AppColors.mutedForeground,
-                                      letterSpacing: 1.0,
-                                    ),
-                                    counterText: '',
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(horizontal: 16),
-                                  ),
-                                ),
-                              ),
-                            ],
+                ),
+                const SizedBox(height: 36),
+                AnimatedBuilder(
+                  animation: _shakeAnimation,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(_shakeAnimation.value, 0),
+                      child: Container(
+                        height: 62,
+                        decoration: BoxDecoration(
+                          color: AppColors.card,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: _errorText.isNotEmpty
+                                ? AppColors.destructive
+                                : (_isFocused
+                                    ? AppColors.primary
+                                    : AppColors.border),
+                            width: (_isFocused || _errorText.isNotEmpty) ? 2.0 : 1.5,
                           ),
                         ),
-                      );
-                    },
-                  ),
-                  if (_errorText.isNotEmpty)
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 8.0, left: 4.0),
-                        child: Text(
-                          _errorText,
-                          style: const TextStyle(
-                            color: Color(0xFFFF4757),
-                            fontSize: 13,
-                          ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                  right: BorderSide(
+                                    color: AppColors.border,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Text(
+                                    '🇮🇳',
+                                    style: TextStyle(fontSize: 22),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '+91',
+                                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                      color: Colors.white,
+                                      fontSize: 17,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _phoneController,
+                                focusNode: _focusNode,
+                                keyboardType: TextInputType.phone,
+                                maxLength: 10,
+                                autofocus: true,
+                                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  letterSpacing: 2.0,
+                                ),
+                                decoration: const InputDecoration(
+                                  hintText: '98765 43210',
+                                  hintStyle: TextStyle(
+                                    color: AppColors.border,
+                                    letterSpacing: 1.0,
+                                  ),
+                                  counterText: '',
+                                  border: InputBorder.none,
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 16),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (_errorText.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(top: 8.0, left: 4.0),
+                      child: Text(
+                        _errorText,
+                        style: const TextStyle(
+                          color: AppColors.destructive,
+                          fontSize: 13,
                         ),
                       ),
                     ),
-                  const SizedBox(height: 16),
-                  NeoPopButton.primary(
-                    onPressed: _isLoading ? null : _handleContinue,
-                    isLoading: _isLoading,
-                    enabled: valid,
-                    depth: 6.0,
-                    child: NeoPopButtonText(
-                      'Continue',
-                      color: valid ? const Color(0xFF050505) :Colors.black,
-                      icon: Icons.arrow_forward_rounded,
-                    ),
                   ),
-                  // Padding(
-                  //   padding: const EdgeInsets.symmetric(vertical: 24.0),
-                  //   child: Row(
-                  //     children: const [
-                  //       Expanded(
-                  //         child: Divider(color: AppColors.border, thickness: 1),
-                  //       ),
-                  //       Padding(
-                  //         padding: EdgeInsets.symmetric(horizontal: 16.0),
-                  //         child: Text(
-                  //           'or',
-                  //           style: TextStyle(
-                  //             color: AppColors.mutedForeground,
-                  //             fontSize: 14,
-                  //           ),
-                  //         ),
-                  //       ),
-                  //       Expanded(
-                  //         child: Divider(color: AppColors.border, thickness: 1),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                  // NeoPopButton.outline(
-                  //   onPressed: () {},
-                  //   borderColor: const Color(0xFF4285F4),
-                  //   child: Row(
-                  //     mainAxisAlignment: MainAxisAlignment.center,
-                  //     children: const [
-                  //       Text(
-                  //         'G',
-                  //         style: TextStyle(
-                  //           color: Color(0xFF4285F4),
-                  //           fontSize: 22,
-                  //           fontWeight: FontWeight.w700,
-                  //         ),
-                  //       ),
-                  //       SizedBox(width: 12),
-                  //       Text(
-                  //         'Continue with Google',
-                  //         style: TextStyle(
-                  //           color: Colors.white,
-                  //           fontSize: 16,
-                  //           fontWeight: FontWeight.w600,
-                  //         ),
-                  //       ),
-                  //     ],
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 28),
-                  // const Padding(
-                  //   padding: EdgeInsets.symmetric(horizontal: 16.0),
-                  //   child: Text.rich(
-                  //     TextSpan(
-                  //       text: 'By continuing, you agree to our ',
-                  //       style: TextStyle(
-                  //         color: AppColors.mutedForeground,
-                  //         fontSize: 12,
-                  //         height: 1.67,
-                  //       ),
-                  //       children: [
-                  //         TextSpan(
-                  //           text: 'Terms of Service',
-                  //           style: TextStyle(
-                  //             color: AppColors.primary,
-                  //             fontWeight: FontWeight.w500,
-                  //           ),
-                  //         ),
-                  //         TextSpan(text: ' and '),
-                  //         TextSpan(
-                  //           text: 'Privacy Policy',
-                  //           style: TextStyle(
-                  //             color: AppColors.primary,
-                  //             fontWeight: FontWeight.w500,
-                  //           ),
-                  //         ),
-                  //       ],
-                  //     ),
-                  //     textAlign: TextAlign.center,
-                  //   ),
-                  // ),
-                  // const SizedBox(height: 32),
-                ],
-              ),
+                const SizedBox(height: 16),
+                NeoPopButton.primary(
+                  onPressed: _isLoading ? null : _handleContinue,
+                  isLoading: _isLoading,
+                  enabled: valid,
+                  depth: 6.0,
+                  child: NeoPopButtonText(
+                    'Continue',
+                    color: valid ? AppColors.darkText : Colors.black,
+                    icon: Icons.arrow_forward_rounded,
+                  ),
+                ),
+                const SizedBox(height: 32),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
