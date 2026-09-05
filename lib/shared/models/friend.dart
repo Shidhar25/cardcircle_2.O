@@ -24,6 +24,14 @@ class Friend {
   /// coincidence is how the wrong id ends up in a request.
   final String contactId;
 
+  /// The contact's phone number as the directory returned it.
+  ///
+  /// Shown where a contact needs identifying without a username — two
+  /// people in an address book share a name often enough that the number
+  /// is the only thing telling them apart. Empty when the directory did
+  /// not include one.
+  final String mobileNumber;
+
   final String name;
   final String username;
   final String initials;
@@ -40,6 +48,7 @@ class Friend {
   const Friend({
     required this.id,
     required this.contactId,
+    this.mobileNumber = '',
     required this.name,
     required this.username,
     required this.initials,
@@ -58,6 +67,7 @@ class Friend {
   Friend withAction(ContactAction next) => Friend(
     id: id,
     contactId: contactId,
+    mobileNumber: mobileNumber,
     name: name,
     username: username,
     initials: initials,

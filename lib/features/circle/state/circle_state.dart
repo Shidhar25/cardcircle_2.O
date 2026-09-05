@@ -249,6 +249,7 @@ class CircleState extends ChangeNotifier {
           Friend(
             id: matchedUserId.isNotEmpty ? matchedUserId : contactId,
             contactId: contactId,
+            mobileNumber: (item['mobile_number'] ?? '').toString(),
             name: contactName,
             username: isMatched ? '@$displayName' : 'Not on CardCircle',
             initials: initials.toUpperCase(),

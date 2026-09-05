@@ -602,14 +602,24 @@ class _CircleScreenState extends State<CircleScreen> {
                                             color: AppColors.text,
                                           ),
                                         ),
-                                        const SizedBox(height: 1),
-                                        Text(
-                                          friend.id,
-                                          style: AppText.sans(
-                                            11,
-                                            color: AppColors.textDim,
+                                        // The number, never the contact id —
+                                        // a raw UUID under someone's name
+                                        // identifies nothing and reads as a
+                                        // bug. Omitted entirely when the
+                                        // directory sent none, rather than
+                                        // leaving a blank second line.
+                                        if (friend.mobileNumber.isNotEmpty) ...[
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            friend.mobileNumber,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppText.sans(
+                                              11,
+                                              color: AppColors.textDim,
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ],
                                     ),
                                   ),
