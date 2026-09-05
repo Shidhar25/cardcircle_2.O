@@ -43,7 +43,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     String formatted = '';
     if (clean.length > 4) {
-      formatted = '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, _mathMin(clean.length, 8))}';
+      formatted =
+          '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, _mathMin(clean.length, 8))}';
     } else if (clean.length > 2) {
       formatted = '${clean.substring(0, 2)} / ${clean.substring(2)}';
     } else {
@@ -110,7 +111,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (name.isNotEmpty) {
         try {
           final clean = name.trim().replaceAll(RegExp(r'[^\w]'), '');
-          initials = clean.isNotEmpty ? clean[0] : String.fromCharCode(name.runes.first);
+          initials = clean.isNotEmpty
+              ? clean[0]
+              : String.fromCharCode(name.runes.first);
         } catch (_) {
           initials = 'U';
         }
@@ -125,9 +128,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         avatarColorIndex: currentProfile?.avatarColorIndex ?? 0,
         initials: initials.toUpperCase(),
       );
-      
+
       await authState.saveProfile(updatedProfile);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -154,7 +157,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isFormValid = _nameController.text.isNotEmpty && _emailController.text.isNotEmpty;
+    final isFormValid =
+        _nameController.text.isNotEmpty && _emailController.text.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -162,12 +166,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Edit Profile',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
       ),
@@ -203,7 +215,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       padding: const EdgeInsets.only(bottom: 16.0),
                       child: Text(
                         _errorMsg,
-                        style: const TextStyle(color: AppColors.destructive, fontSize: 13),
+                        style: const TextStyle(
+                          color: AppColors.destructive,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   const SizedBox(height: 24),
@@ -214,7 +229,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     depth: 6.0,
                     child: NeoPopButtonText(
                       'Save Changes',
-                      color: isFormValid && !_loading ? AppColors.darkText : Colors.black,
+                      color: isFormValid && !_loading
+                          ? AppColors.darkText
+                          : Colors.black,
                       icon: Icons.check_circle_rounded,
                     ),
                   ),

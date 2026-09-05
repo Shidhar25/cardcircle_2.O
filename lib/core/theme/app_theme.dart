@@ -61,12 +61,12 @@ class AppColors {
   static const double radius = 8.0;
 
   static List<BoxShadow> get limeGlow => [
-        BoxShadow(
-          color: gold.withValues(alpha: 0.35),
-          blurRadius: 16,
-          spreadRadius: 1,
-        ),
-      ];
+    BoxShadow(
+      color: gold.withValues(alpha: 0.35),
+      blurRadius: 16,
+      spreadRadius: 1,
+    ),
+  ];
 
   static List<BoxShadow> get cyanGlow => limeGlow;
   static List<BoxShadow> get greenGlow => limeGlow;
@@ -80,6 +80,14 @@ class AppRadii {
   static const double card = 8.0;
   static const double pill = 20.0;
 }
+
+/// Authentic credit-card proportions — ISO/IEC 7810 ID-1, 85.60 x 53.98 mm.
+///
+/// Every surface that renders a card (the Add Cards row, the Home/Profile
+/// card stack, the card-details modal) sizes its frame from this one
+/// constant, so cards are pixel-consistent with each other *and* read as real
+/// cards rather than arbitrary rectangles.
+const double kCardImageAspectRatio = 85.60 / 53.98;
 
 /// Spacing scale (§1), rounded from the prototype's fractional values.
 class AppSpacing {
@@ -102,27 +110,25 @@ class AppText {
     Color? color,
     double? letterSpacing,
     double? height,
-  }) =>
-      GoogleFonts.inter(
-        fontSize: size,
-        fontWeight: weight,
-        color: color ?? AppColors.text,
-        letterSpacing: letterSpacing,
-        height: height,
-      );
+  }) => GoogleFonts.inter(
+    fontSize: size,
+    fontWeight: weight,
+    color: color ?? AppColors.text,
+    letterSpacing: letterSpacing,
+    height: height,
+  );
 
   static TextStyle mono(
     double size, {
     double ls = 1.4,
     FontWeight w = FontWeight.w400,
     Color? c,
-  }) =>
-      GoogleFonts.jetBrainsMono(
-        fontSize: size,
-        letterSpacing: ls,
-        fontWeight: w,
-        color: c ?? AppColors.text,
-      );
+  }) => GoogleFonts.jetBrainsMono(
+    fontSize: size,
+    letterSpacing: ls,
+    fontWeight: w,
+    color: c ?? AppColors.text,
+  );
 }
 
 class AppTheme {
@@ -145,30 +151,83 @@ class AppTheme {
       fontFamily: GoogleFonts.inter().fontFamily,
       textTheme: TextTheme(
         // Titles: Inter, medium weight per spec (no dedicated display face).
-        displayLarge: AppText.sans(27, weight: FontWeight.w500, color: AppColors.text, letterSpacing: -0.5),
-        displayMedium: AppText.sans(25, weight: FontWeight.w500, color: AppColors.text, letterSpacing: -0.3),
-        headlineLarge: AppText.sans(21, weight: FontWeight.w500, color: AppColors.text),
-        headlineMedium: AppText.sans(17, weight: FontWeight.w500, color: AppColors.text),
+        displayLarge: AppText.sans(
+          27,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+          letterSpacing: -0.5,
+        ),
+        displayMedium: AppText.sans(
+          25,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+          letterSpacing: -0.3,
+        ),
+        headlineLarge: AppText.sans(
+          21,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+        ),
+        headlineMedium: AppText.sans(
+          17,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+        ),
 
         // Tabs & metadata: JetBrains Mono, uppercase labels/stats.
         labelLarge: AppText.mono(13, w: FontWeight.w700, c: AppColors.gold),
-        labelMedium: AppText.mono(12, w: FontWeight.w400, c: AppColors.textDim, ls: 1.2),
-        labelSmall: AppText.mono(11, w: FontWeight.w400, c: AppColors.textFaint, ls: 1.2),
+        labelMedium: AppText.mono(
+          12,
+          w: FontWeight.w400,
+          c: AppColors.textDim,
+          ls: 1.2,
+        ),
+        labelSmall: AppText.mono(
+          11,
+          w: FontWeight.w400,
+          c: AppColors.textFaint,
+          ls: 1.2,
+        ),
 
         // Subheadings.
-        titleLarge: AppText.sans(15.5, weight: FontWeight.w500, color: AppColors.text, letterSpacing: 0.2),
-        titleMedium: AppText.sans(13.5, weight: FontWeight.w400, color: AppColors.textMuted),
+        titleLarge: AppText.sans(
+          15.5,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+          letterSpacing: 0.2,
+        ),
+        titleMedium: AppText.sans(
+          13.5,
+          weight: FontWeight.w400,
+          color: AppColors.textMuted,
+        ),
 
         // Body text.
-        bodyLarge: AppText.sans(14, weight: FontWeight.w400, color: AppColors.text),
-        bodyMedium: AppText.sans(13, weight: FontWeight.w400, color: AppColors.textMuted),
-        bodySmall: AppText.sans(12, weight: FontWeight.w400, color: AppColors.textDim),
+        bodyLarge: AppText.sans(
+          14,
+          weight: FontWeight.w400,
+          color: AppColors.text,
+        ),
+        bodyMedium: AppText.sans(
+          13,
+          weight: FontWeight.w400,
+          color: AppColors.textMuted,
+        ),
+        bodySmall: AppText.sans(
+          12,
+          weight: FontWeight.w400,
+          color: AppColors.textDim,
+        ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.background,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: AppText.sans(17, weight: FontWeight.w500, color: AppColors.text),
+        titleTextStyle: AppText.sans(
+          17,
+          weight: FontWeight.w500,
+          color: AppColors.text,
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: AppColors.elevated,

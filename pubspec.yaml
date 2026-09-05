@@ -46,8 +46,8 @@ dependencies:
   device_info_plus: ^10.1.2
   firebase_core: ^3.1.1
   firebase_messaging: ^15.0.1
-  phosphor_flutter: ^2.1.0
-  intl: ^0.19.0
+  phosphor_icons: ^3.0.1
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
@@ -75,6 +75,10 @@ flutter:
   assets:
     - assets/icons/
     - assets/fonts/
+  # Card artwork, bank logos and network logos are served by the backend
+  # (image.url / bank_logo.url / network_logo.url) and are no longer
+  # bundled. The assets/card-bg, card-bg-vector, bank-logos and
+  # network-logos folders are unreferenced and safe to delete.
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,11 +1,27 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import '../../../core/config/remote_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../state/feed_state.dart';
+import '../../profile/state/category_state.dart';
+import '../../../shared/models/spend_category.dart';
 import '../../../shared/models/hack.dart';
 import '../../../shared/widgets/gritty_background.dart';
+import '../../../shared/widgets/meta_chip.dart';
+import '../../../shared/widgets/primitives.dart';
 
+/// v1 screen 21 — Benefits: search bar, MY BENEFITS / CIRCLE BENEFITS
+/// segmented tabs, a horizontal category pill row, and a vertical feed.
+///
+/// The title, search hint and tab labels read from remote config. The
+/// category pills come from `GET /category/list` via [CategoryState] — they
+/// used to be a hardcoded list ("Dining", "Online", …) that shared no
+/// vocabulary with the backend's categories (`food_dining`, "Food &
+/// Dining"), so selecting a pill matched nothing and emptied the feed.
+///
+/// v1 always has cards (FLUTTER_HANDOFF.md §2), so the "no cards yet" banner
+/// and RECOMMENDED tab from the prototype are intentionally not built here.
 class DiscoverScreen extends StatefulWidget {
   const DiscoverScreen({super.key});
 
@@ -14,597 +30,605 @@ class DiscoverScreen extends StatefulWidget {
 }
 
 class _DiscoverScreenState extends State<DiscoverScreen> {
-  String _activeTab = 'my_hacks'; // 'my_hacks' | 'circle_hacks'
-  String _selectedCategory = 'All';
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
+  int _tabIndex = 0; // 0 = mine, 1 = circle
 
-  final List<String> _categories = [
-    'All',
-    'Cashback',
-    'Rewards',
-    'Travel',
-    'Dining',
-    'Fuel',
-    'Gas',
-    'Shopping'
-  ];
+  /// The selected category, or null for "All".
+  SpendCategory? _category;
+  final TextEditingController _searchController = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+  String _query = '';
+
+  HackFeed get _feed => _tabIndex == 0 ? HackFeed.mine : HackFeed.circle;
+
+  /// How far from the bottom to start fetching the next page. Roughly two
+  /// rows, so the next batch is usually in place before the user reaches
+  /// the end and the scroll never visibly stalls.
+  static const double _prefetchExtent = 400;
 
   @override
   void initState() {
     super.initState();
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.toLowerCase().trim();
-      });
+      setState(() => _query = _searchController.text.toLowerCase().trim());
+    });
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<CategoryState>().loadAll();
+    });
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - _prefetchExtent) {
+      // FeedState ignores this when a request is already in flight or the
+      // list is exhausted, so firing it on every scroll frame is safe.
+      context.read<FeedState>().loadNextPage(_feed);
+    }
+  }
+
+  /// Keeps paging while a filter hides everything that has loaded.
+  ///
+  /// Filtering happens on the client, so a page of seven can contain no
+  /// match and leave the user staring at "nothing here" while twenty more
+  /// benefits sit unfetched on the server. Rather than claiming the list is
+  /// empty, this walks forward a page at a time until something matches or
+  /// the feed runs out.
+  void _continueSearchIfNeeded(FeedState feedState, int visibleCount) {
+    final filtering = _query.isNotEmpty || _category != null;
+    if (!filtering || visibleCount > 0) return;
+    if (!feedState.hasMore(_feed)) return;
+    if (feedState.isLoadingMore(_feed) || feedState.isLoadingFirstPage(_feed)) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<FeedState>().loadNextPage(_feed);
     });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
     super.dispose();
   }
 
-  List<Hack> _filterHacks(List<Hack> sourceList) {
-    return sourceList.where((h) {
-      final matchesCat = _selectedCategory == 'All' ||
-          h.category.toLowerCase() == _selectedCategory.toLowerCase();
-      final matchesSearch = h.name.toLowerCase().contains(_searchQuery) ||
-          h.heading.toLowerCase().contains(_searchQuery) ||
-          h.cards.any((c) => c.toLowerCase().contains(_searchQuery));
-      return matchesCat && matchesSearch;
+  List<Hack> _filter(List<Hack> source) {
+    final selected = _category;
+    return source.where((h) {
+      // A benefit may name its category by machine name or display label,
+      // so matching is delegated to the category itself rather than done
+      // with a string equality that only one of those spellings passes.
+      final matchesCat = selected == null || selected.matches(h.category);
+      final matchesQuery =
+          _query.isEmpty ||
+          h.title.toLowerCase().contains(_query) ||
+          h.cardName.toLowerCase().contains(_query) ||
+          h.category.toLowerCase().contains(_query);
+      return matchesCat && matchesQuery;
     }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final categoryState = Provider.of<CategoryState>(context);
+    final categories = categoryState.all;
     final feedState = Provider.of<FeedState>(context);
+    final feed = _feed;
+    final hacks = _filter(feedState.itemsOf(feed));
+    final loading = feedState.isLoadingFirstPage(feed);
+    final loadingMore = feedState.isLoadingMore(feed);
+    final hasMore = feedState.hasMore(feed);
+    final error = feedState.errorOf(feed);
 
-    final rawList = _activeTab == 'my_hacks'
-        ? feedState.myHacks
-        : feedState.circleHacks;
-
-    final displayedHacks = _filterHacks(rawList);
+    _continueSearchIfNeeded(feedState, hacks.length);
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: GrittyBackground(
         child: SafeArea(
           child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title Header
-            const Padding(
-              padding: EdgeInsets.only(left: 20.0, right: 20.0, top: 16.0, bottom: 8.0),
-              child: Text(
-                'Discover',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  letterSpacing: -0.5,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                  AppSpacing.xl,
+                  0,
                 ),
-              ),
-            ),
-
-            // Search Bar Input
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
-              child: Container(
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.card,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.border, width: 1),
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.search, size: 20, color: AppColors.mutedForeground),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: _searchController,
-                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                        decoration: const InputDecoration(
-                          hintText: 'Search cards, brands, categories...',
-                          hintStyle: TextStyle(color: AppColors.mutedForeground, fontSize: 13),
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.zero,
+                    Text(
+                      config.text('discover.title'),
+                      style: AppText.sans(
+                        25,
+                        weight: FontWeight.w500,
+                        color: AppColors.text,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.mdLg),
+                    OutlinedSurface(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.mdLg,
+                      ),
+                      child: SizedBox(
+                        height: 44,
+                        child: Row(
+                          children: [
+                            const Icon(
+                              PhosphorIconsRegular.magnifyingGlass,
+                              size: 16,
+                              color: AppColors.textFaint,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                style: AppText.sans(
+                                  13.5,
+                                  color: AppColors.text,
+                                ),
+                                decoration: InputDecoration.collapsed(
+                                  hintText: config.text('discover.searchHint'),
+                                  hintStyle: AppText.sans(
+                                    13.5,
+                                    color: AppColors.textFaint,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    if (_searchController.text.isNotEmpty)
-                      GestureDetector(
-                        onTap: () => _searchController.clear(),
-                        child: const Icon(Icons.close, size: 18, color: AppColors.mutedForeground),
+                    const SizedBox(height: AppSpacing.mdLg),
+                    OutlinedSurface(
+                      padding: const EdgeInsets.all(3),
+                      child: SegmentedTabs(
+                        labels: config.strings('discover.tabLabels'),
+                        selectedIndex: _tabIndex,
+                        onChanged: (i) {
+                          setState(() => _tabIndex = i);
+                          // Each tab keeps its own paging, so the newly
+                          // shown one may still need its first page.
+                          feedState.loadFirstPage(
+                            i == 0 ? HackFeed.mine : HackFeed.circle,
+                          );
+                          if (_scrollController.hasClients) {
+                            _scrollController.jumpTo(0);
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.mdLg),
+                    // Hidden entirely until the categories arrive — an
+                    // empty strip is less confusing than a lone "All" pill
+                    // that looks like the only choice.
+                    if (categories.isNotEmpty)
+                      SizedBox(
+                        height: 34,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          // +1 for the leading "All".
+                          itemCount: categories.length + 1,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(width: 7),
+                          itemBuilder: (context, index) {
+                            if (index == 0) {
+                              return FilterPill(
+                                label: 'All',
+                                selected: _category == null,
+                                onTap: () => setState(() => _category = null),
+                              );
+                            }
+                            final c = categories[index - 1];
+                            return FilterPill(
+                              label: c.displayName,
+                              selected: _category?.id == c.id,
+                              onTap: () => setState(() => _category = c),
+                            );
+                          },
+                        ),
                       ),
                   ],
                 ),
               ),
-            ),
-
-            // Tab Bar Toggles (My Hacks vs Circle Hacks)
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              height: 50,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border, width: 1),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _activeTab = 'my_hacks';
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(14),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'MY HACKS',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: _activeTab == 'my_hacks'
-                                  ? AppColors.primary
-                                  : AppColors.mutedForeground,
-                              fontWeight: _activeTab == 'my_hacks'
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              fontSize: 13,
-                            ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () => feedState.refresh(feed),
+                  color: AppColors.gold,
+                  backgroundColor: AppColors.surface,
+                  child: loading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.gold,
+                            strokeWidth: 2,
                           ),
-                          if (_activeTab == 'my_hacks') ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              height: 3,
-                              width: 36,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(2),
+                        )
+                      : hacks.isEmpty
+                      ? ListView(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 56),
+                              child: Column(
+                                children: [
+                                  if (loadingMore) ...[
+                                    const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        color: AppColors.gold,
+                                        strokeWidth: 2,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      'Looking through more benefits…',
+                                      style: AppText.sans(
+                                        13,
+                                        color: AppColors.textFaint,
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    const Icon(
+                                      PhosphorIconsRegular.magnifyingGlass,
+                                      size: 30,
+                                      color: AppColors.textGhost,
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      error ??
+                                          'Nothing here yet. Try another '
+                                              'category.',
+                                      textAlign: TextAlign.center,
+                                      style: AppText.sans(
+                                        13,
+                                        color: AppColors.textFaint,
+                                      ),
+                                    ),
+                                    if (error != null) ...[
+                                      const SizedBox(height: AppSpacing.md),
+                                      TextButton(
+                                        onPressed: () => feedState
+                                            .loadFirstPage(feed, force: true),
+                                        child: Text(
+                                          'Retry',
+                                          style: AppText.sans(
+                                            13,
+                                            color: AppColors.gold,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ],
                               ),
                             ),
                           ],
-                        ],
+                        )
+                      : ListView.separated(
+                          controller: _scrollController,
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.xl,
+                            AppSpacing.mdLg,
+                            AppSpacing.xl,
+                            108,
+                          ),
+                          // One extra row for the footer: the loading
+                          // spinner, a retry, or the end-of-list marker.
+                          itemCount: hacks.length + 1,
+                          separatorBuilder: (context, index) =>
+                              const SizedBox(height: AppSpacing.mdLg),
+                          itemBuilder: (context, index) {
+                            if (index == hacks.length) {
+                              return _FeedFooter(
+                                loading: loadingMore,
+                                hasMore: hasMore,
+                                error: error,
+                                onRetry: () => feedState.loadNextPage(feed),
+                              );
+                            }
+                            final hack = hacks[index];
+                            return _HackRow(
+                              hack: hack,
+                              hue: AvatarHue
+                                  .values[index % AvatarHue.values.length],
+                              onOpen: () => Navigator.pushNamed(
+                                context,
+                                '/hack-detail',
+                                arguments: hack,
+                              ),
+                              onLike: () => feedState.likeHack(hack.id),
+                            );
+                          },
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The row below the last benefit: a spinner while the next page loads, a
+/// retry when a page failed, and a quiet marker once the feed is exhausted.
+///
+/// Rendering *something* here matters — an infinite list that simply stops
+/// is indistinguishable from one that is still loading.
+class _FeedFooter extends StatelessWidget {
+  final bool loading;
+  final bool hasMore;
+  final String? error;
+  final VoidCallback onRetry;
+
+  const _FeedFooter({
+    required this.loading,
+    required this.hasMore,
+    required this.error,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.xl),
+        child: Center(
+          child: SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              color: AppColors.gold,
+              strokeWidth: 2,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+        child: Center(
+          child: GestureDetector(
+            onTap: onRetry,
+            child: Column(
+              children: [
+                Text(
+                  error!,
+                  textAlign: TextAlign.center,
+                  style: AppText.sans(12, color: AppColors.textFaint),
+                ),
+                const SizedBox(height: 6),
+                Text('Retry', style: AppText.sans(12.5, color: AppColors.gold)),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (hasMore) return const SizedBox(height: AppSpacing.xl);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
+      child: Center(
+        child: MonoLabel(
+          "THAT'S EVERYTHING",
+          size: 9,
+          letterSpacing: 1.6,
+          color: AppColors.textGhost,
+        ),
+      ),
+    );
+  }
+}
+
+class _HackRow extends StatelessWidget {
+  final Hack hack;
+  final AvatarHue hue;
+  final VoidCallback onOpen;
+  final VoidCallback onLike;
+
+  const _HackRow({
+    required this.hack,
+    required this.hue,
+    required this.onOpen,
+    required this.onLike,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedSurface(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.mdLg,
+              AppSpacing.lg,
+              0,
+            ),
+            child: Row(
+              children: [
+                AvatarBubble(initials: hack.authorInitials, size: 32, hue: hue),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        hack.author,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.sans(
+                          12.5,
+                          weight: FontWeight.w500,
+                          color: AppColors.text,
+                        ),
                       ),
+                      const SizedBox(height: 2),
+                      MonoLabel(
+                        '${hack.authorLevel} · ${hack.timestamp}',
+                        size: 9,
+                        letterSpacing: 1.1,
+                        color: AppColors.textGhost,
+                        uppercase: true,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                // Categories run to "Forex / International"; without a cap
+                // the chip grows past the card edge and pushes the author
+                // block out with it.
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 110),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4.5,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(AppRadii.chip),
+                    color: AppColors.elevated,
+                  ),
+                  child: MonoLabel(
+                    hack.category,
+                    size: 8.5,
+                    letterSpacing: 1.2,
+                    color: AppColors.textDim,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          InkWell(
+            onTap: onOpen,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.mdLg,
+                AppSpacing.lg,
+                0,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // A benefit with no `name` falls back to its heading,
+                  // which is a full sentence — capped so one long entry
+                  // cannot make a card several screens tall.
+                  Text(
+                    hack.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.sans(
+                      15.5,
+                      weight: FontWeight.w500,
+                      color: AppColors.text,
+                      height: 1.34,
                     ),
                   ),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _activeTab = 'circle_hacks';
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(14),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'CIRCLE HACKS',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: _activeTab == 'circle_hacks'
-                                  ? AppColors.primary
-                                  : AppColors.mutedForeground,
-                              fontWeight: _activeTab == 'circle_hacks'
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                              fontSize: 13,
-                            ),
-                          ),
-                          if (_activeTab == 'circle_hacks') ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              height: 3,
-                              width: 36,
-                              decoration: BoxDecoration(
-                                color: AppColors.primary,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    hack.description,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppText.sans(
+                      12.5,
+                      color: AppColors.textDim,
+                      height: 1.55,
                     ),
                   ),
                 ],
               ),
             ),
-
-            // Horizontal Categories Scroll Bar
-            SizedBox(
-              height: 44,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                itemCount: _categories.length,
-                itemBuilder: (context, catIdx) {
-                  final cat = _categories[catIdx];
-                  final isSelected = cat == _selectedCategory;
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 4.0),
-                    child: InkWell(
-                      onTap: () {
-                        setState(() {
-                          _selectedCategory = cat;
-                        });
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.card : Colors.transparent,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isSelected ? AppColors.primary : AppColors.border,
-                            width: 1.5,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: Text(
-                          cat,
-                          style: TextStyle(
-                            color: isSelected ? Colors.white : AppColors.mutedForeground,
-                            fontSize: 13,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-
-            // Main Hacks List
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: () async {
-                  await feedState.loadHacks();
-                },
-                color: AppColors.primary,
-                backgroundColor: AppColors.card,
-                child: displayedHacks.isEmpty
-                    ? SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        child: Container(
-                          height: MediaQuery.of(context).size.height * 0.4,
-                          alignment: Alignment.center,
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: const [
-                              Icon(Icons.search_off_rounded,
-                                  size: 44, color: AppColors.mutedForeground),
-                              SizedBox(height: 12),
-                              Text(
-                                'No hacks found matching your search.',
-                                style: TextStyle(
-                                  color: AppColors.mutedForeground,
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.only(bottom: 24, left: 16, right: 16),
-                        itemCount: displayedHacks.length,
-                        itemBuilder: (context, index) {
-                          final hack = displayedHacks[index];
-                          return _buildHackCard(context, hack, feedState)
-                              .animate()
-                              .fade(delay: (100 * index).ms, duration: 350.ms)
-                              .slideY(begin: 0.05, curve: Curves.easeOutQuad);
-                        },
-                      ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildHackCard(BuildContext context, Hack hack, FeedState feedState) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 16.0),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.border, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
           ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Visual Header Banner
-          Stack(
-            children: [
-              Container(
-                height: 170,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      const Color(0xFF1F2937),
-                      const Color(0xFF111827),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: Opacity(
-                  opacity: 0.25,
-                  child: Image.network(
-                    hack.image.isNotEmpty
-                        ? hack.image
-                        : 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=600&q=80',
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: const Color(0xFF1E293B),
-                      alignment: Alignment.center,
-                      child: const Icon(Icons.credit_card_rounded,
-                          size: 60, color: AppColors.mutedForeground),
-                    ),
-                  ),
-                ),
-              ),
-
-              // Gradient Overlay
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.black.withValues(alpha: 0.3),
-                        Colors.black.withValues(alpha: 0.85),
-                      ],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Category Badge (Top Left)
-              Positioned(
-                top: 14,
-                left: 14,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.2),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    hack.category.toUpperCase(),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ),
-
-              // Like Heart Button (Top Right)
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Column(
-                  children: [
-                    // Like Button
-                    GestureDetector(
-                      onTap: () => feedState.likeHack(hack.id),
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          hack.liked
-                              ? Icons.favorite
-                              : Icons.favorite_border_rounded,
-                          color: hack.liked ? Colors.redAccent : Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 10),
-
-                    // Share Button
-                    GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Sharing this hack with your circle...'),
-                            backgroundColor: AppColors.primary,
-                            duration: Duration(seconds: 2),
-                          ),
-                        );
-                      },
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.card,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: AppColors.border,
-                            width: 1,
-                          ),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.share_rounded,
-                          color: AppColors.primary,
-                          size: 18,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Star Rating Overlay Bar (Above Content)
-              Positioned(
-                bottom: 12,
-                left: 14,
-                right: 14,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.4),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.lg),
+            // The savings chip used to be unconstrained while a Spacer
+            // fought a sibling Flexible for the leftovers. `savings` is
+            // often a whole sentence ("3.5% saved on every international
+            // transaction, with no cap"), so the row overflowed on nearly
+            // every real benefit. The two info chips now share the space
+            // that the fixed-width like button leaves.
+            child: Row(
+              children: [
+                Expanded(
                   child: Row(
                     children: [
-                      ...List.generate(
-                        5,
-                        (starIdx) => Icon(
-                          starIdx < hack.rating.floor()
-                              ? Icons.star_rounded
-                              : Icons.star_half_rounded,
-                          color: const Color(0xFFFFD700),
-                          size: 16,
+                      Flexible(
+                        child: MetaChip(
+                          icon: PhosphorIconsRegular.trendUp,
+                          iconColor: AppColors.teal,
+                          background: AppColors.tealSurface,
+                          label: hack.savings,
+                          labelColor: AppColors.teal,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${hack.rating}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                      const SizedBox(width: AppSpacing.xs),
+                      Flexible(
+                        child: MetaChip(
+                          icon: PhosphorIconsRegular.creditCard,
+                          iconColor: AppColors.gold,
+                          background: AppColors.elevated,
+                          label: hack.cardName,
+                          labelColor: const Color(0xFFB2B6CA),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-
-          // Card Content Body
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Hack Name
-                Text(
-                  hack.name.toUpperCase(),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 4),
-
-                // Card Name Subtitle
-                Text(
-                  hack.cardName.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: AppColors.mutedForeground,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 8),
-
-                // Description Heading
-                Text(
-                  hack.heading,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.white70,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Terms & Conditions / Availed By
-                Row(
-                  children: [
-                    const Icon(Icons.description_outlined,
-                        size: 14, color: AppColors.mutedForeground),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        hack.circledetail.isNotEmpty
-                            ? hack.circledetail
-                            : (hack.availedby.isNotEmpty
-                                ? hack.availedby
-                                : 'Terms & Conditions apply'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: hack.circledetail.isNotEmpty
-                              ? AppColors.primary
-                              : AppColors.mutedForeground,
-                          decoration: hack.circledetail.isEmpty
-                              ? TextDecoration.underline
-                              : TextDecoration.none,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // View Details Button
+                const SizedBox(width: AppSpacing.xs),
                 GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, '/how-to-apply', arguments: hack),
+                  onTap: onLike,
                   child: Container(
-                    height: 46,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.4),
-                        width: 1,
-                      ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 9,
+                      vertical: 5.6,
                     ),
-                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(AppRadii.chip),
+                      color: hack.liked
+                          ? AppColors.gold.withValues(alpha: 0.14)
+                          : AppColors.elevated,
+                    ),
                     child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          hack.liked
+                              ? PhosphorIconsFill.heart
+                              : PhosphorIconsRegular.heart,
+                          size: 13,
+                          color: hack.liked
+                              ? AppColors.gold
+                              : AppColors.textDim,
+                        ),
+                        const SizedBox(width: 6),
                         Text(
-                          'View Details',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
+                          '${hack.likes}',
+                          style: AppText.mono(
+                            9.5,
+                            ls: 0,
+                            c: hack.liked ? AppColors.gold : AppColors.textDim,
                           ),
                         ),
-                        SizedBox(width: 6),
-                        Icon(Icons.arrow_forward_rounded,
-                            color: AppColors.primary, size: 16),
                       ],
                     ),
                   ),
@@ -616,5 +640,4 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       ),
     );
   }
-
 }

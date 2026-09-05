@@ -1,94 +1,196 @@
-import 'package:flutter/material.dart';
-import '../../../core/services/logger_service.dart';
-import '../../../core/services/api_service.dart';
-import '../../../shared/models/models.dart';
+import 'package:flutter/foundation.dart';
 
+import '../../../core/services/api_service.dart';
+import '../../../core/services/logger_service.dart';
+import '../../../shared/models/models.dart';
+import '../../../shared/models/paged_result.dart';
+
+/// Which benefit list a request is for.
+enum HackFeed { mine, circle }
+
+/// One infinitely-scrolling list: the items loaded so far plus where the
+/// paging has got to.
+class _Feed {
+  final List<Hack> items = [];
+
+  /// The last page successfully loaded. 0 means nothing yet.
+  int loadedPage = 0;
+
+  /// Whether the server says another page exists. Starts true so the first
+  /// load is allowed.
+  bool hasMore = true;
+
+  /// Ids already held, so a page that overlaps the previous one cannot
+  /// insert the same benefit twice. Server-side slicing shifts items
+  /// between pages whenever the underlying list changes, which is exactly
+  /// how duplicate rows appear in an infinite scroll.
+  final Set<String> _ids = {};
+
+  bool isLoadingFirst = false;
+  bool isLoadingMore = false;
+
+  /// Set when a page request failed, so the list can offer a retry instead
+  /// of just stopping.
+  String? error;
+
+  bool get isEmpty => items.isEmpty;
+
+  void reset() {
+    items.clear();
+    _ids.clear();
+    loadedPage = 0;
+    hasMore = true;
+    error = null;
+  }
+
+  /// Appends [incoming], skipping anything already held. Returns how many
+  /// were genuinely new.
+  int append(Iterable<Hack> incoming) {
+    var added = 0;
+    for (final hack in incoming) {
+      // An item with no id cannot be de-duplicated; keep it rather than
+      // dropping real content.
+      if (hack.id.isEmpty || _ids.add(hack.id)) {
+        items.add(hack);
+        added++;
+      }
+    }
+    return added;
+  }
+}
+
+/// The benefits feed, paged Instagram-style.
+///
+/// Both lists are lazily paged: the screen asks for the next page as the
+/// user nears the bottom, and this refuses to run two requests for the same
+/// list at once. Without that guard a fast scroll fires a burst of requests
+/// for the same page and the list fills with repeats.
 class FeedState extends ChangeNotifier {
-  late List<Hack> _hacks;
-  late List<Offer> _offers;
-  List<Hack> _myHacks = [];
-  List<Hack> _circleHacks = [];
-  bool _isLoadingMyHacks = false;
-  bool _isLoadingCircleHacks = false;
+  final _Feed _mine = _Feed();
+  final _Feed _circle = _Feed();
 
   FeedState() {
-    _initSeedData();
-    fetchMyHacks();
-    fetchCircleHacks();
+    loadFirstPage(HackFeed.mine);
+    loadFirstPage(HackFeed.circle);
   }
 
-  List<Hack> get hacks => _hacks;
-  List<Offer> get offers => _offers;
-  List<Hack> get myHacks => _myHacks;
-  List<Hack> get circleHacks => _circleHacks;
-  bool get isLoadingMyHacks => _isLoadingMyHacks;
-  bool get isLoadingCircleHacks => _isLoadingCircleHacks;
+  _Feed _feedFor(HackFeed which) => which == HackFeed.mine ? _mine : _circle;
 
-  void _initSeedData() {
-    _hacks = [];
-    _offers = [];
-  }
+  List<Hack> get myHacks => List.unmodifiable(_mine.items);
+  List<Hack> get circleHacks => List.unmodifiable(_circle.items);
 
-  Future<void> fetchMyHacks() async {
-    _isLoadingMyHacks = true;
+  List<Hack> itemsOf(HackFeed which) =>
+      List.unmodifiable(_feedFor(which).items);
+
+  bool isLoadingFirstPage(HackFeed which) => _feedFor(which).isLoadingFirst;
+  bool isLoadingMore(HackFeed which) => _feedFor(which).isLoadingMore;
+  bool hasMore(HackFeed which) => _feedFor(which).hasMore;
+  String? errorOf(HackFeed which) => _feedFor(which).error;
+
+  bool get isLoadingMyHacks => _mine.isLoadingFirst;
+  bool get isLoadingCircleHacks => _circle.isLoadingFirst;
+
+  /// Loads page 1, replacing whatever is held.
+  ///
+  /// [force] reloads even when items are already present; without it,
+  /// returning to the tab keeps the scroll position and the pages already
+  /// fetched.
+  Future<void> loadFirstPage(HackFeed which, {bool force = false}) async {
+    final feed = _feedFor(which);
+    if (feed.isLoadingFirst) return;
+    if (feed.items.isNotEmpty && !force) return;
+
+    feed.isLoadingFirst = true;
+    feed.error = null;
     notifyListeners();
-    try {
-      final list = await ApiService.getMyHacks();
-      if (list != null && list.isNotEmpty) {
-        _myHacks = list.map((e) => Hack.fromJson(e)).toList();
-        LoggerService.info('Fetched ${_myHacks.length} My Hacks from backend.');
-      }
-    } catch (e, stack) {
-      LoggerService.error('Error in fetchMyHacks', e, stack);
-    } finally {
-      _isLoadingMyHacks = false;
-      notifyListeners();
+
+    final page = await _request(which, 1);
+
+    if (page == null) {
+      feed.error = 'Could not load benefits. Pull to retry.';
+    } else {
+      // Replaced only on success, so a failed refresh does not blank a list
+      // the user was already reading.
+      feed.reset();
+      feed.append(page.items.map(Hack.fromJson));
+      feed.loadedPage = page.page;
+      feed.hasMore = page.hasMore;
+      LoggerService.info(
+        '${which.name}: page ${page.page} -> ${feed.items.length} items, '
+        'hasMore=${page.hasMore}',
+      );
     }
+
+    feed.isLoadingFirst = false;
+    notifyListeners();
   }
 
-  Future<void> fetchCircleHacks() async {
-    _isLoadingCircleHacks = true;
+  /// Loads the page after the last one held.
+  ///
+  /// Safe to call repeatedly and from a scroll listener: it returns
+  /// immediately when a request is already in flight, when the list is
+  /// exhausted, or while the first page is still loading.
+  Future<void> loadNextPage(HackFeed which) async {
+    final feed = _feedFor(which);
+    if (feed.isLoadingMore || feed.isLoadingFirst || !feed.hasMore) return;
+
+    feed.isLoadingMore = true;
+    feed.error = null;
     notifyListeners();
-    try {
-      final list = await ApiService.getCircleHacks();
-      if (list != null && list.isNotEmpty) {
-        _circleHacks = list.map((e) => Hack.fromJson(e)).toList();
-        LoggerService.info('Fetched ${_circleHacks.length} Circle Hacks from backend.');
+
+    final next = feed.loadedPage + 1;
+    final page = await _request(which, next);
+
+    if (page == null) {
+      feed.error = 'Could not load more. Tap to retry.';
+    } else {
+      final added = feed.append(page.items.map(Hack.fromJson));
+      feed.loadedPage = page.page;
+      feed.hasMore = page.hasMore;
+
+      // A page that was entirely duplicates would leave the scroll stuck at
+      // the bottom asking for the same page forever. Treat it as the end.
+      if (added == 0 && page.items.isNotEmpty) {
+        LoggerService.warning(
+          '${which.name}: page ${page.page} was all duplicates; stopping.',
+        );
+        feed.hasMore = false;
       }
-    } catch (e, stack) {
-      LoggerService.error('Error in fetchCircleHacks', e, stack);
-    } finally {
-      _isLoadingCircleHacks = false;
-      notifyListeners();
     }
+
+    feed.isLoadingMore = false;
+    notifyListeners();
+  }
+
+  /// Discards everything and reloads page 1 — the pull-to-refresh path.
+  Future<void> refresh(HackFeed which) async {
+    _feedFor(which).reset();
+    await loadFirstPage(which, force: true);
+  }
+
+  Future<void> refreshAll() =>
+      Future.wait([refresh(HackFeed.mine), refresh(HackFeed.circle)]);
+
+  Future<PagedResult<Map<String, dynamic>>?> _request(
+    HackFeed which,
+    int page,
+  ) {
+    return which == HackFeed.mine
+        ? ApiService.getMyHacks(page: page)
+        : ApiService.getCircleHacks(page: page);
   }
 
   void likeHack(String id) {
     LoggerService.debug('Toggling like for hack ID: $id');
-    for (var list in [_hacks, _myHacks, _circleHacks]) {
-      for (var h in list) {
+    for (final list in [_mine.items, _circle.items]) {
+      for (final h in list) {
         if (h.id == id) {
           h.liked = !h.liked;
-          if (h.liked) {
-            h.likes += 1;
-          } else {
-            h.likes -= 1;
-          }
+          h.likes += h.liked ? 1 : -1;
           break;
         }
       }
     }
     notifyListeners();
-  }
-
-  Future<void> loadHacks() async {
-    await Future.wait([
-      fetchMyHacks(),
-      fetchCircleHacks(),
-    ]);
-  }
-
-  Future<void> loadOffers() async {
-    await loadHacks();
   }
 }

@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
-import 'dart:ui';
+import '../../../core/config/config_inspector_screen.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
-import '../../../shared/widgets/card_visual.dart';
+import '../state/category_state.dart';
+import '../../../shared/widgets/card_stack.dart';
 import '../../../shared/models/models.dart' as models;
-import '../../../shared/widgets/neo_pop_button.dart';
-
 import '../../../shared/widgets/gritty_background.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/primitives.dart';
 
+/// v1 screen 24 — Profile. Matches CardCircle.html's `isProfile` block:
+/// settings gear, conic-ring avatar, level pill, followers/following
+/// stat row, the shared fan-out card stack, spend-category chips, and a
+/// settings list ending in Log out.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -18,551 +24,112 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static const List<Color> levelColors = [
-    AppColors.secondary,
-    AppColors.primary,
-    AppColors.purple,
-    AppColors.cyan,
-    AppColors.gold,
+  bool _fanned = false;
+
+  /// Dev-only rows are appended only in debug builds, so a release build
+  /// has no path to the internals.
+  static List<Map<String, dynamic>> get visibleSettingsOptions => [
+    ...settingsOptions,
+    if (ConfigInspectorScreen.isAvailable) ...[
+      {
+        'label': 'Remote config (dev)',
+        'icon': PhosphorIconsRegular.slidersHorizontal,
+        'route': ConfigInspectorScreen.routeName,
+      },
+    ],
   ];
 
   static const List<Map<String, dynamic>> settingsOptions = [
-    {'label': 'Notification Preferences', 'icon': Icons.notifications_none_rounded},
-    {'label': 'Privacy Settings', 'icon': Icons.security_rounded},
-    {'label': 'Connected Cards', 'icon': Icons.credit_card_rounded},
-    {'label': 'Invite Friends', 'icon': Icons.person_add_alt_1_rounded},
-    {'label': 'Help & Support', 'icon': Icons.help_outline_rounded},
+    {
+      'label': 'Notification preferences',
+      'icon': PhosphorIconsRegular.bell,
+      'route': '/notifications',
+    },
+    {
+      'label': 'Privacy & visibility',
+      'icon': PhosphorIconsRegular.lockKey,
+      'route': null,
+    },
+    {
+      'label': 'Connected cards',
+      'icon': PhosphorIconsRegular.creditCard,
+      'route': '/select-cards',
+    },
+    {
+      'label': 'Invite friends',
+      'icon': PhosphorIconsRegular.userPlus,
+      'route': null,
+    },
+    {
+      'label': 'Help & support',
+      'icon': PhosphorIconsRegular.lifebuoy,
+      'route': null,
+    },
   ];
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       Provider.of<AuthState>(context, listen: false).refreshProfileFromServer();
+      // The chips below show the user's own tagged categories, so both the
+      // catalogue and their selection are needed.
+      final categories = Provider.of<CategoryState>(context, listen: false);
+      categories.loadAll();
+      categories.loadMine();
     });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final authState = Provider.of<AuthState>(context);
-    final user = authState.user;
-
-    final Color levelColor = levelColors[user.levelIndex.clamp(0, levelColors.length - 1)];
-
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: GrittyBackground(
-        child: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: () => Provider.of<AuthState>(context, listen: false).refreshProfileFromServer(),
-          color: AppColors.primary,
-          backgroundColor: AppColors.card,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.only(bottom: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 20, top: 12),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: GestureDetector(
-                      onTap: () => Navigator.pushNamed(context, '/edit-profile'),
-                      child: Container(
-                        width: 38,
-                        height: 38,
-                        decoration: const BoxDecoration(
-                          color: AppColors.elevated,
-                          shape: BoxShape.circle,
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.settings_outlined,
-                          size: 20,
-                          color: AppColors.mutedForeground,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                Center(
-                  child: Column(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/edit-profile'),
-                        child: Stack(
-                          alignment: Alignment.center,
-                          clipBehavior: Clip.none,
-                          children: [
-                            Container(
-                              width: 90,
-                              height: 90,
-                              padding: const EdgeInsets.all(3),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                border: Border.all(color: levelColor, width: 3),
-                              ),
-                              child: Container(
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.secondary, // Solid Periwinkle
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  user.initials,
-                                  style: const TextStyle(
-                                    color: AppColors.darkText,
-                                    fontSize: 30,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                width: 26,
-                                height: 26,
-                                decoration: BoxDecoration(
-                                  color: AppColors.card,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: AppColors.border, width: 1.5),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.edit_rounded,
-                                  size: 12,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        user.name.toUpperCase(),
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        user.username.toLowerCase(),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.mutedForeground,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: levelColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: levelColor, width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.shield_outlined, size: 13, color: levelColor),
-                            const SizedBox(width: 6),
-                            Text(
-                              user.level,
-                              style: TextStyle(
-                                color: levelColor,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  child: Row(
-                    children: [
-                      _buildStatCol('Followers', user.followersCount.toString(), AppColors.cyan),
-                      _buildStatDivider(),
-                      _buildStatCol('Following', user.followingCount.toString(), AppColors.gold),
-                      _buildStatDivider(),
-                      _buildStatCol('Friends', user.friendsCount.toString(), AppColors.purple),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-                _buildStackedCardsSection(context, user.cards),
-
-                const SizedBox(height: 24),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Text(
-                    'Settings',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border, width: 1),
-                  ),
-                  child: Column(
-                    children: [
-                      ...List.generate(settingsOptions.length, (index) {
-                        final opt = settingsOptions[index];
-                        return Container(
-                          decoration: const BoxDecoration(
-                            border: Border(bottom: BorderSide(color: AppColors.border, width: 1)),
-                          ),
-                          child: Material(
-                            color: Colors.transparent,
-                            child: ListTile(
-                              onTap: () {
-                                if (opt['label'] == 'Connected Cards') {
-                                  Navigator.pushNamed(context, '/select-cards', arguments: {'fromProfile': true});
-                                }
-                              },
-                              leading: Container(
-                                width: 36,
-                                height: 36,
-                                decoration: BoxDecoration(
-                                  color: AppColors.elevated,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                alignment: Alignment.center,
-                                child: Icon(opt['icon'], size: 18, color: AppColors.primary),
-                              ),
-                              title: Text(
-                                opt['label'],
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                              trailing: const Icon(Icons.chevron_right_rounded,
-                                  size: 16, color: AppColors.mutedForeground),
-                            ),
-                          ),
-                        );
-                      }),
-                      Material(
-                        color: Colors.transparent,
-                        child: ListTile(
-                          onTap: () => _showLogoutConfirmation(context, authState),
-                          leading: Container(
-                            width: 36,
-                            height: 36,
-                            decoration: BoxDecoration(
-                              color: AppColors.destructive.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            alignment: Alignment.center,
-                            child: const Icon(Icons.logout_rounded, size: 18, color: AppColors.destructive),
-                          ),
-                          title: const Text(
-                            'Log out',
-                            style: TextStyle(
-                              color: AppColors.destructive,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildStackedCardsSection(BuildContext context, List<models.CreditCard> cards) {
-    if (cards.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'My Cards (0)',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-                TextButton.icon(
-                  onPressed: () => Navigator.pushNamed(context, '/select-cards', arguments: {'fromProfile': true}),
-                  icon: const Icon(Icons.add_circle_outline_rounded, size: 16, color: AppColors.primary),
-                  label: const Text('Add', style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Container(
-              height: 120,
-              width: double.infinity,
-              decoration: BoxDecoration(
-                color: AppColors.card,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: const Center(
-                child: Text('No cards added yet.', style: TextStyle(color: AppColors.mutedForeground)),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Limit to 3 cards for the stacked visual, similar to the image
-    final displayCards = cards.take(3).toList();
-    // Calculate total height based on number of cards to stack nicely
-    final double containerHeight = 150.0 + (displayCards.length - 1) * 35.0;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: GestureDetector(
-        onTap: () => _showCardDetailsModal(context, cards, 0),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.border, width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.2),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'MY CARDS (${cards.length})',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: () => Navigator.pushNamed(context, '/select-cards', arguments: {'fromProfile': true}),
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(Icons.add, size: 16, color: Colors.black),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.5),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: const Row(
-                          children: [
-                            Icon(Icons.circle, size: 4, color: Colors.white),
-                            SizedBox(width: 2),
-                            Icon(Icons.circle, size: 4, color: Colors.white),
-                            SizedBox(width: 2),
-                            Icon(Icons.circle, size: 4, color: Colors.white),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: containerHeight - 56, // Total minus header area
-                child: Stack(
-                  alignment: Alignment.bottomCenter,
-                  children: List.generate(displayCards.length, (index) {
-                    // Reverse index so the first item in the list is on top (rendered last)
-                    int reversedIndex = displayCards.length - 1 - index;
-                    models.CreditCard card = displayCards[reversedIndex];
-
-                    // Positioning math
-                    double topOffset = index * 35.0; // Distance from top of stack area
-                    double horizontalPadding = (displayCards.length - 1 - index) * 8.0; // Narrower at top
-
-                    // Fading effect for cards further back
-                    double opacity = 1.0;
-                    if (index < displayCards.length - 1) {
-                      opacity = 0.5 + (index / displayCards.length) * 0.4;
-                    }
-
-                    return Positioned(
-                      top: topOffset,
-                      left: horizontalPadding,
-                      right: horizontalPadding,
-                      bottom: 0,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: index == displayCards.length - 1
-                              ? AppColors.purple // Lightest for front card
-                              : AppColors.secondary.withValues(alpha: opacity), // Darker for back cards
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
-                          ),
-                          boxShadow: [
-                            if (index > 0)
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 4,
-                                offset: const Offset(0, -2),
-                              )
-                          ],
-                        ),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Simple text icon representation based on bank
-                                if (index == displayCards.length - 1) ...[
-                                  Text(
-                                    card.bank.isNotEmpty ? card.bank[0].toUpperCase() : 'C',
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    card.bank,
-                                    style: const TextStyle(
-                                      color: Colors.black87,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ] else ...[
-                                  Text(
-                                    card.bank.isNotEmpty ? card.bank[0].toUpperCase() : 'C',
-                                    style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.7),
-                                      fontSize: 16,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                ]
-                              ],
-                            ),
-                            Text(
-                              // Using category or a placeholder number for the UI feel
-                              card.category,
-                              style: TextStyle(
-                                color: index == displayCards.length - 1 ? Colors.black87 : Colors.white,
-                                fontSize: index == displayCards.length - 1 ? 16 : 14,
-                                fontWeight: index == displayCards.length - 1 ? FontWeight.w600 : FontWeight.w400,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   void _showLogoutConfirmation(BuildContext context, AuthState authState) {
     showDialog(
       context: context,
-      builder: (BuildContext context) {
+      builder: (context) {
         return AlertDialog(
-          backgroundColor: AppColors.card,
+          backgroundColor: AppColors.surface,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(AppRadii.card),
           ),
-          title: const Text(
+          title: Text(
             'Confirm Logout',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            style: AppText.sans(
+              15,
+              weight: FontWeight.w500,
+              color: AppColors.text,
+            ),
           ),
-          content: const Text(
+          content: Text(
             'Are you sure you want to log out of CardCircle?',
-            style: TextStyle(color: AppColors.mutedForeground),
+            style: AppText.sans(13, color: AppColors.textDim),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text(
+              child: Text(
                 'Cancel',
-                style: TextStyle(color: AppColors.mutedForeground),
+                style: AppText.sans(13, color: AppColors.textDim),
               ),
             ),
-            NeoPopButton(
+            TextButton(
               onPressed: () async {
                 Navigator.pop(context);
                 await ApiService.logout();
                 await authState.logout();
                 if (context.mounted) {
-                  Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/login',
+                    (route) => false,
+                  );
                 }
               },
-              style: NeoPopButtonStyle.flat,
-              color: AppColors.destructive,
-              shadowColor: AppColors.destructive.withValues(alpha: 0.6),
-              depth: 4.0,
-              fullWidth: false,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: const Text(
+              child: Text(
                 'Log out',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: AppText.sans(
+                  13,
+                  weight: FontWeight.w500,
+                  color: AppColors.destructive,
+                ),
               ),
             ),
           ],
@@ -571,57 +138,526 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
-  Widget _buildStatCol(String label, String value, Color color) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontSize: 20,
-              fontWeight: FontWeight.w900,
-              color: color,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label.toUpperCase(),
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 8,
-              color: AppColors.mutedForeground,
-              fontWeight: FontWeight.w700,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showCardDetailsModal(BuildContext context, List<models.CreditCard> cards, int initialIndex) {
+  void _showCardDetailsModal(
+    BuildContext context,
+    List<models.CreditCard> cards,
+    int initialIndex,
+  ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return _CardDetailsModalView(cards: cards, initialIndex: initialIndex);
-      },
+      builder: (context) => _CardDetailsModalView(
+        cards: cards,
+        initialIndex: initialIndex,
+        cardHolderName: Provider.of<AuthState>(
+          context,
+          listen: false,
+        ).user.name,
+      ),
     );
   }
 
-  Widget _buildStatDivider() {
-    return Container(width: 1, height: 30, color: AppColors.border);
+  @override
+  Widget build(BuildContext context) {
+    final authState = Provider.of<AuthState>(context);
+    final user = authState.user;
+    final myCategories = Provider.of<CategoryState>(context).mine;
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: GrittyBackground(
+        child: SafeArea(
+          child: RefreshIndicator(
+            onRefresh: () => Provider.of<AuthState>(
+              context,
+              listen: false,
+            ).refreshProfileFromServer(),
+            color: AppColors.gold,
+            backgroundColor: AppColors.surface,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 108),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: AppSpacing.md),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                    ),
+                    child: Align(
+                      alignment: Alignment.centerRight,
+                      child: IconTile(
+                        icon: PhosphorIconsRegular.gearSix,
+                        iconSize: 18,
+                        color: AppColors.textDim,
+                        onTap: () =>
+                            Navigator.pushNamed(context, '/edit-profile'),
+                      ),
+                    ),
+                  ),
+                  Center(
+                    child: Column(
+                      children: [
+                        GestureDetector(
+                          onTap: () =>
+                              Navigator.pushNamed(context, '/edit-profile'),
+                          child: Container(
+                            width: 88,
+                            height: 88,
+                            padding: const EdgeInsets.all(3),
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              gradient: SweepGradient(
+                                colors: [
+                                  AppColors.goldLight,
+                                  AppColors.teal,
+                                  Color(0xFFB5ABFC),
+                                  AppColors.goldLight,
+                                ],
+                              ),
+                            ),
+                            child: AvatarBubble(
+                              initials: user.initials,
+                              size: 82,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.mdLg),
+                        Text(
+                          user.name,
+                          style: AppText.sans(
+                            21,
+                            weight: FontWeight.w500,
+                            color: AppColors.text,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        MonoLabel(
+                          user.username.replaceAll('@', ''),
+                          size: 11,
+                          letterSpacing: 1.1,
+                          color: AppColors.textFaint,
+                          uppercase: false,
+                        ),
+                        const SizedBox(height: AppSpacing.mdLg),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5.6,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(AppRadii.pill),
+                            border: Border.all(
+                              color: AppColors.gold.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                PhosphorIconsRegular.medal,
+                                size: 13,
+                                color: AppColors.gold,
+                              ),
+                              const SizedBox(width: 6),
+                              MonoLabel(
+                                'LEVEL ${user.levelIndex + 1} · ${user.level}',
+                                size: 9.5,
+                                letterSpacing: 1.4,
+                                color: AppColors.gold,
+                                uppercase: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xl,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: OutlinedSurface(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.mdLg,
+                      ),
+                      child: Row(
+                        children: [
+                          _StatCol(
+                            value: '${user.followersCount}',
+                            label: 'FOLLOWERS',
+                            onTap: () =>
+                                Navigator.pushNamed(context, '/circle'),
+                          ),
+                          Container(
+                            width: 1,
+                            height: 30,
+                            color: AppColors.border,
+                          ),
+                          _StatCol(
+                            value: '${user.followingCount}',
+                            label: 'FOLLOWING',
+                            onTap: () =>
+                                Navigator.pushNamed(context, '/circle'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xxl,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            MonoLabel(
+                              'MY CARDS · ${user.cards.length}',
+                              size: 9.5,
+                              letterSpacing: 1.8,
+                              color: AppColors.textFaint,
+                            ),
+                            if (user.cards.isNotEmpty)
+                              GestureDetector(
+                                onTap: () => setState(() => _fanned = !_fanned),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _fanned ? 'Collapse' : 'Fan out',
+                                      style: AppText.sans(
+                                        11.5,
+                                        color: AppColors.gold,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Icon(
+                                      _fanned
+                                          ? PhosphorIconsRegular
+                                                .arrowsInLineVertical
+                                          : PhosphorIconsRegular
+                                                .arrowsOutLineVertical,
+                                      size: 13,
+                                      color: AppColors.gold,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.mdLg),
+                        GestureDetector(
+                          onTap: user.cards.isEmpty
+                              ? null
+                              : () => _showCardDetailsModal(
+                                  context,
+                                  user.cards,
+                                  0,
+                                ),
+                          child: CardStack(cards: user.cards, fanned: _fanned),
+                        ),
+                        const SizedBox(height: AppSpacing.mdLg),
+                        GestureDetector(
+                          onTap: () => Navigator.pushNamed(
+                            context,
+                            '/select-cards',
+                            arguments: {'fromProfile': true},
+                          ),
+                          child: OutlinedSurface(
+                            padding: EdgeInsets.zero,
+                            child: SizedBox(
+                              height: 46,
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Icon(
+                                    PhosphorIconsRegular.plus,
+                                    size: 15,
+                                    color: AppColors.text,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Add another card',
+                                    style: AppText.sans(
+                                      13,
+                                      color: AppColors.text,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xxl,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const MonoLabel(
+                          'SPEND CATEGORIES',
+                          size: 9.5,
+                          letterSpacing: 1.8,
+                          color: AppColors.textFaint,
+                        ),
+                        const SizedBox(height: AppSpacing.md),
+                        // The user's own tagged categories, from
+                        // `GET /category/user`. These were five hardcoded
+                        // words before, identical for every account and
+                        // unrelated to what anyone actually picked in
+                        // Select Tags.
+                        Wrap(
+                          spacing: 7,
+                          runSpacing: 7,
+                          children: [
+                            if (myCategories.isEmpty)
+                              Text(
+                                'No categories picked yet.',
+                                style: AppText.sans(
+                                  11.5,
+                                  color: AppColors.textFaint,
+                                ),
+                              )
+                            else
+                              ...myCategories.map(
+                                (c) => Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 11,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadii.pill,
+                                    ),
+                                    border: Border.all(color: AppColors.border),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        c.icon,
+                                        size: 12,
+                                        color: c.color(AppColors.textMuted),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        c.displayName,
+                                        style: AppText.sans(
+                                          11.5,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            GestureDetector(
+                              onTap: () =>
+                                  Navigator.pushNamed(context, '/select-tags'),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 11,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadii.pill,
+                                  ),
+                                  border: Border.all(
+                                    color: AppColors.gold.withValues(
+                                      alpha: 0.5,
+                                    ),
+                                  ),
+                                ),
+                                child: Text(
+                                  myCategories.isEmpty ? 'Pick' : 'Edit',
+                                  style: AppText.sans(
+                                    11.5,
+                                    color: AppColors.gold,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xxl,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: OutlinedSurface(
+                      padding: EdgeInsets.zero,
+                      child: Column(
+                        children: [
+                          ...visibleSettingsOptions.map(
+                            (opt) => _SettingsRow(
+                              label: opt['label'],
+                              icon: opt['icon'],
+                              onTap: () {
+                                final route = opt['route'] as String?;
+                                if (route == '/select-cards') {
+                                  Navigator.pushNamed(
+                                    context,
+                                    route!,
+                                    arguments: {'fromProfile': true},
+                                  );
+                                } else if (route != null) {
+                                  Navigator.pushNamed(context, route);
+                                }
+                              },
+                            ),
+                          ),
+                          _SettingsRow(
+                            label: 'Log out',
+                            icon: PhosphorIconsRegular.signOut,
+                            destructive: true,
+                            onTap: () =>
+                                _showLogoutConfirmation(context, authState),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCol extends StatelessWidget {
+  final String value;
+  final String label;
+  final VoidCallback? onTap;
+
+  const _StatCol({required this.value, required this.label, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          children: [
+            Text(
+              value,
+              style: AppText.mono(
+                19,
+                ls: 0,
+                w: FontWeight.w700,
+                c: AppColors.text,
+              ),
+            ),
+            const SizedBox(height: 4),
+            MonoLabel(
+              label,
+              size: 8.5,
+              letterSpacing: 1.4,
+              color: AppColors.textFaint,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+  final bool destructive;
+
+  const _SettingsRow({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+    this.destructive = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Color tint = destructive ? AppColors.destructive : AppColors.gold;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.mdLg),
+          child: Row(
+            children: [
+              Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadii.card),
+                  color: destructive
+                      ? AppColors.destructive.withValues(alpha: 0.12)
+                      : AppColors.elevated,
+                ),
+                child: Icon(icon, size: 15, color: tint),
+              ),
+              const SizedBox(width: AppSpacing.mdLg),
+              Expanded(
+                child: Text(
+                  label,
+                  style: AppText.sans(
+                    13,
+                    color: destructive ? AppColors.destructive : AppColors.text,
+                  ),
+                ),
+              ),
+              if (!destructive)
+                const Icon(
+                  PhosphorIconsRegular.caretRight,
+                  size: 13,
+                  color: AppColors.textGhost,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
 class _CardDetailsModalView extends StatefulWidget {
   final List<models.CreditCard> cards;
   final int initialIndex;
+  final String cardHolderName;
 
   const _CardDetailsModalView({
     required this.cards,
     required this.initialIndex,
+    required this.cardHolderName,
   });
 
   @override
@@ -629,22 +665,15 @@ class _CardDetailsModalView extends StatefulWidget {
 }
 
 class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
-  // Large multiple of the card count used as the PageView's starting offset,
-  // so the user can keep swiping in either direction and the deck appears to
-  // loop endlessly instead of stopping at the first/last card.
-  static const int _loopWindows = 5000;
-
   late PageController _pageController;
   double _currentPage = 0;
   int get _cardCount => widget.cards.length;
-  int get _loopBaseIndex => _cardCount * (_loopWindows ~/ 2);
 
   @override
   void initState() {
     super.initState();
-    final initialPage = _loopBaseIndex + widget.initialIndex;
-    _currentPage = initialPage.toDouble();
-    _pageController = PageController(initialPage: initialPage, viewportFraction: 1.0);
+    _currentPage = widget.initialIndex.toDouble();
+    _pageController = PageController(initialPage: widget.initialIndex);
     _pageController.addListener(() {
       setState(() {
         _currentPage = _pageController.page ?? 0;
@@ -652,10 +681,96 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
     });
   }
 
+  bool _deleting = false;
+
   @override
   void dispose() {
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Index of the card currently filling the viewport, clamped because a
+  /// deletion shrinks the list under the controller.
+  int get _visibleIndex =>
+      _cardCount == 0 ? 0 : _currentPage.round().clamp(0, _cardCount - 1);
+
+  Future<void> _confirmDelete() async {
+    final card = widget.cards[_visibleIndex];
+
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadii.card),
+        ),
+        title: Text(
+          'Remove card?',
+          style: AppText.sans(
+            15,
+            weight: FontWeight.w500,
+            color: AppColors.text,
+          ),
+        ),
+        content: Text(
+          '${card.name} will be removed from your wallet. Hacks matched to it '
+          'will stop showing. You can add it back any time.',
+          style: AppText.sans(13, color: AppColors.textDim, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: Text(
+              'Cancel',
+              style: AppText.sans(13, color: AppColors.textDim),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: Text(
+              'Remove',
+              style: AppText.sans(
+                13,
+                weight: FontWeight.w500,
+                color: AppColors.destructive,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _deleting = true);
+    final authState = Provider.of<AuthState>(context, listen: false);
+    final result = await authState.deleteCard(card.id);
+    if (!mounted) return;
+    setState(() => _deleting = false);
+
+    final messenger = ScaffoldMessenger.of(context);
+    if (result.ok) {
+      // The sheet holds its own reference to the list, so close it once the
+      // wallet is empty rather than showing an empty carousel.
+      if (authState.user.cards.isEmpty) {
+        Navigator.pop(context);
+      } else {
+        // The list shrank under the controller, so settle it back onto a
+        // valid page once this frame's rebuild has applied the new count.
+        final target = _visibleIndex;
+        setState(() => _currentPage = target.toDouble());
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _pageController.hasClients) {
+            _pageController.jumpToPage(target);
+          }
+        });
+      }
+    }
+    messenger.showResult(
+      result,
+      onSuccess: '${card.name} removed.',
+      onFailure: 'Could not remove that card. Please try again.',
+    );
   }
 
   @override
@@ -695,15 +810,43 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
                     letterSpacing: 2.0,
                   ),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, color: Colors.white70),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (cardList.isNotEmpty)
+                      IconButton(
+                        onPressed: _deleting ? null : _confirmDelete,
+                        tooltip: 'Remove this card',
+                        icon: _deleting
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.destructive,
+                                ),
+                              )
+                            : const Icon(
+                                PhosphorIconsRegular.trash,
+                                color: AppColors.destructive,
+                                size: 20,
+                              ),
+                      ),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(
+                        Icons.close_rounded,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
 
-          // Stacked Vertical Page Controller Carousel
+          // Vertical Page Controller Carousel — plain swipe, no parallax
+          // scale/rotate/opacity animation.
           Expanded(
             flex: 4,
             child: cardList.isEmpty
@@ -711,47 +854,23 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
                 : PageView.builder(
                     controller: _pageController,
                     scrollDirection: Axis.vertical,
-                    physics: const BouncingScrollPhysics(),
-                    // Effectively-infinite item count with modulo indexing
-                    // below makes the deck loop endlessly in both directions.
-                    itemCount: _cardCount * _loopWindows,
+                    itemCount: _cardCount,
                     itemBuilder: (context, index) {
-                      final realIndex = index % _cardCount;
-                      double delta = index - _currentPage;
-                      if (delta > 2 || delta < -1) return const SizedBox.shrink();
-
-                      // Ease the raw scroll delta so the scale/opacity/rotate
-                      // transforms settle smoothly instead of tracking the
-                      // finger linearly.
-                      final double t = delta.abs().clamp(0.0, 1.0);
-                      final double eased = Curves.easeOutCubic.transform(t);
-
-                      double scale = (1 - eased * 0.1).clamp(0.75, 1.0);
-                      double translateY = delta * -70;
-                      double translateX = delta * 20;
-                      double rotate = delta * -0.08;
-                      double opacity = (1 - eased * 0.4).clamp(0.0, 1.0);
-
-                      if (delta < 0) {
-                        opacity = (1 - eased * 3).clamp(0.0, 1.0);
-                        translateY = delta * 150;
-                        scale = 1.0;
-                      }
-
-                      return Opacity(
-                        opacity: opacity,
-                        child: Transform.translate(
-                          offset: Offset(translateX, translateY),
-                          child: Transform.rotate(
-                            angle: rotate,
-                            child: Transform.scale(
-                              scale: scale,
-                              child: Center(
-                                child: CardVisual(
-                                  card: cardList[realIndex],
-                                  compact: false,
-                                  showTactileTab: true,
-                                ),
+                      return Center(
+                        child: Padding(
+                          // Narrow gutter: the plate is the subject of this
+                          // screen, so it gets as much width as it can.
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.md,
+                          ),
+                          child: LayoutBuilder(
+                            builder: (context, constraints) => SizedBox(
+                              width: constraints.maxWidth,
+                              child: CardFacePanel(
+                                card: cardList[index],
+                                height:
+                                    constraints.maxWidth /
+                                    kCardImageAspectRatio,
                               ),
                             ),
                           ),
@@ -862,7 +981,7 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          card.name.toUpperCase(),
+                          widget.cardHolderName.toUpperCase(),
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,

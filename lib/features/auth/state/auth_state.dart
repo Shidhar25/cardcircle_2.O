@@ -1,8 +1,12 @@
 import 'dart:convert';
-import 'package:flutter/material.dart' hide Badge;
+import 'package:flutter/material.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/logger_service.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/api_result.dart';
+import '../../../core/services/device_service.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../shared/models/card_network.dart';
 import '../../../shared/models/models.dart';
 
 class AuthState extends ChangeNotifier {
@@ -20,126 +24,27 @@ class AuthState extends ChangeNotifier {
   ProfileData? get profile => _profile;
   User get user => _user;
 
+  /// Blank slate for a signed-out (or not-yet-loaded) session.
+  ///
+  /// This must NOT seed demo cards or demo stats. It runs on construction and
+  /// again on logout, so anything invented here leaks across account
+  /// switches: log out of one account and into another and you'd briefly —
+  /// or permanently, if the cards fetch failed — see fabricated cards with
+  /// fabricated colours, plus the previous user's name and stats.
+  /// Real values arrive from fetchUserCards() and refreshProfileFromServer().
   void _initUser() {
-    final myCards = [
-      CreditCard(
-        id: 'c1',
-        name: 'Regalia Gold',
-        bank: 'HDFC Bank',
-        lastFour: '4821',
-        gradientColors: [const Color(0xFF7B5B00), const Color(0xFFC89B00)],
-        type: 'premium',
-        category: 'Premium',
-      ),
-      CreditCard(
-        id: 'c2',
-        name: 'Cashback Card',
-        bank: 'SBI',
-        lastFour: '3310',
-        gradientColors: [const Color(0xFF0F3460), const Color(0xFF1A1A2E)],
-        type: 'cashback',
-        category: 'Cashback',
-      ),
-      CreditCard(
-        id: 'c3',
-        name: 'Amazon Pay',
-        bank: 'ICICI Bank',
-        lastFour: '7645',
-        gradientColors: [const Color(0xFF134E5E), const Color(0xFF71B280)],
-        type: 'shopping',
-        category: 'Shopping',
-      ),
-      CreditCard(
-        id: 'c4',
-        name: 'Ace Card',
-        bank: 'Axis Bank',
-        lastFour: '9023',
-        gradientColors: [const Color(0xFF1A1A2E), const Color(0xFF533483)],
-        type: 'cashback',
-        category: 'Cashback',
-      ),
-      CreditCard(
-        id: 'c5',
-        name: 'Millennia',
-        bank: 'HDFC Bank',
-        lastFour: '5512',
-        gradientColors: [const Color(0xFF23074D), const Color(0xFF8B2FC9)],
-        type: 'shopping',
-        category: 'Shopping',
-      ),
-    ];
-
-    final badges = [
-      Badge(
-        id: 'b1',
-        name: 'Cashback King',
-        iconName: 'star',
-        description: 'Earned ₹10,000+ in cashback',
-        earned: true,
-        rarity: 'epic',
-        color: const Color(0xFFFFD700),
-      ),
-      Badge(
-        id: 'b2',
-        name: 'Travel Pro',
-        iconName: 'airplane',
-        description: 'Used airport lounge 10 times',
-        earned: true,
-        rarity: 'rare',
-        color: const Color(0xFF00D4FF),
-      ),
-      Badge(
-        id: 'b3',
-        name: 'Card Collector',
-        iconName: 'card',
-        description: 'Own 5+ credit cards',
-        earned: true,
-        rarity: 'common',
-        color: const Color(0xFF8B5CF6),
-      ),
-      Badge(
-        id: 'b4',
-        name: 'Hack Master',
-        iconName: 'flash',
-        description: 'Share 20 verified hacks',
-        earned: false,
-        rarity: 'legendary',
-        color: const Color(0xFFFF6B35),
-      ),
-      Badge(
-        id: 'b5',
-        name: 'Elite Member',
-        iconName: 'diamond',
-        description: 'Top 1% saver on platform',
-        earned: false,
-        rarity: 'legendary',
-        color: const Color(0xFF00FF88),
-      ),
-      Badge(
-        id: 'b6',
-        name: 'Streak Legend',
-        iconName: 'flame',
-        description: 'Maintain 100-day streak',
-        earned: false,
-        rarity: 'epic',
-        color: const Color(0xFFFF4757),
-      ),
-    ];
-
     _user = User(
-      name: 'Shridhar Hande',
-      username: '@shridhar',
-      initials: 'SS',
-      level: 'Cashback Hunter',
-      levelIndex: 1,
-      points: 2840,
+      name: '',
+      username: '@',
+      initials: '',
+      level: 'New Member',
+      levelIndex: 0,
+      points: 0,
       pointsToNextLevel: 5000,
-      savings: 18750,
-      streak: 12,
-      cards: myCards,
-      badges: badges,
-      friendsCount: 24,
-      hacksShared: 8,
+      streak: 0,
+      cards: const [],
+      friendsCount: 0,
+      hacksShared: 0,
       followersCount: 0,
       followingCount: 0,
     );
@@ -176,7 +81,10 @@ class AuthState extends ChangeNotifier {
 
   Future<void> saveProfile(ProfileData data) async {
     LoggerService.info('Saving user profile: ${data.username}');
-    await LocalStorageService.setString('@cardcircle/profile', jsonEncode(data.toJson()));
+    await LocalStorageService.setString(
+      '@cardcircle/profile',
+      jsonEncode(data.toJson()),
+    );
     _profile = data;
     _user = _user.copyWith(
       name: data.name,
@@ -195,7 +103,8 @@ class AuthState extends ChangeNotifier {
       if (data != null) {
         _user = _user.copyWith(
           name: data['name'] ?? _user.name,
-          username: '@${data['username'] ?? _user.username.replaceAll('@', '')}',
+          username:
+              '@${data['username'] ?? _user.username.replaceAll('@', '')}',
           followersCount: data['followers_count'] ?? _user.followersCount,
           followingCount: data['following_count'] ?? _user.followingCount,
         );
@@ -220,65 +129,106 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// `bank-of-baroda` -> `Bank Of Baroda`. The saved-card response only
+  /// gives the bank slug (`bank_id`/`bank_name`), not a display name.
+  static String _titleCaseSlug(String slug) => slug
+      .split('-')
+      .where((w) => w.isNotEmpty)
+      .map((w) => w[0].toUpperCase() + w.substring(1))
+      .join(' ');
+
   Future<void> fetchUserCards() async {
     final responseList = await ApiService.getUserCards();
     if (responseList != null) {
       final List<CreditCard> fetchedCards = [];
       for (final item in responseList) {
-        final cardData = item['card'] ?? item;
-        final userCardId = item['user_card_id'] ?? '';
-        final cardId = item['card_id'] ?? cardData['id'] ?? '';
-        final bankName = item['bank_name'] ?? cardData['bank'] ?? '';
-        final cardName = item['card_name'] ?? cardData['card_name'] ?? '';
-        final nickname = item['nickname'] ?? '';
-        final category = cardData['category'] ?? 'General';
-        
-        List<Color> gradients = [const Color(0xFF1F1C2C), const Color(0xFF928DAB)];
-        final bankLower = bankName.toLowerCase();
-        if (bankLower.contains('hdfc')) {
-          gradients = [const Color(0xFF7B5B00), const Color(0xFFC89B00)];
-        } else if (bankLower.contains('amex') || bankLower.contains('american express')) {
-          gradients = [const Color(0xFF1E3C72), const Color(0xFF2A5298)];
-        } else if (bankLower.contains('sbi')) {
-          gradients = [const Color(0xFF0F3460), const Color(0xFF1A1A2E)];
-        } else if (bankLower.contains('icici')) {
-          gradients = [const Color(0xFFE65C00), const Color(0xFFF9D423)];
-        } else if (bankLower.contains('axis')) {
-          gradients = [const Color(0xFF800080), const Color(0xFFFF00FF)];
-        } else if (bankLower.contains('yes')) {
-          gradients = [const Color(0xFF0052D4), const Color(0xFF9FFB00)];
-        }
-        
-        fetchedCards.add(CreditCard(
-          id: userCardId.isNotEmpty ? userCardId : cardId,
-          name: cardName,
-          bank: bankName,
-          lastFour: nickname.isNotEmpty ? nickname : (cardId.length > 4 ? cardId.substring(cardId.length - 4) : 'XXXX'),
-          gradientColors: gradients,
-          type: category.toLowerCase(),
-          category: category,
-        ));
+        final userCardId = (item['user_card_id'] ?? '') as String;
+        final cardId = (item['card_id'] ?? '') as String;
+        final bankSlug = (item['bank_id'] ?? item['bank_name'] ?? '') as String;
+        final bankDisplayName = _titleCaseSlug(bankSlug);
+        final cardName = (item['card_name'] ?? '') as String;
+        final issuer = item['issuer'] as String?;
+        final network = item['network'] as String?;
+        final imageUrl = item['image_url'] as String?;
+
+        // The saved-card endpoint has no `is_card_specific` flag, unlike
+        // the catalog, so it is inferred from the path. Generic artwork
+        // lives under `/generic/` — both `bank-generic-cards/` and
+        // `bank-card-bg/`; card-specific art lives under
+        // `/credit-card-images/`. Testing only for `bank-generic-cards`
+        // mislabelled every `bank-card-bg` card as specific.
+        final bool isCardSpecific =
+            imageUrl != null && !imageUrl.contains('/generic/');
+
+        // Bank identity comes from the curated brand registry, not the
+        // network: bundled assets can't 404, can't be swapped for card
+        // artwork by an upstream change, and render instantly.
+        final brand = bankBrandFor(bankSlug);
+
+        // Real bank mark for the plate. Sanitized upstream so card artwork
+        // can't arrive here; resolves for banks that have an asset and
+        // silently hides for the ones that don't.
+        final String? bankLogoUrl = await ApiService.bankLogoFor(bankSlug);
+
+        // Logo URL comes from the shared network registry, which only
+        // names slugs that actually exist on S3 — RuPay has no artwork, so
+        // it deliberately yields no URL and is identified by its label on
+        // the plate instead.
+        final String? networkLogoUrl = CardNetwork.parse(network)?.logoUrl;
+
+        fetchedCards.add(
+          CreditCard(
+            id: userCardId.isNotEmpty ? userCardId : cardId,
+            name: cardName,
+            bank: brand.name.isNotEmpty ? brand.name : bankDisplayName,
+            bankId: bankSlug,
+            network: network ?? '',
+            lastFour: cardId.length > 4
+                ? cardId.substring(cardId.length - 4)
+                : 'XXXX',
+            gradientColors: brand.gradient,
+            type: (item['card_type'] as String? ?? 'General').toLowerCase(),
+            category: (item['card_type'] as String?) ?? 'General',
+            imageUrl: (imageUrl != null && imageUrl.isNotEmpty)
+                ? imageUrl
+                : null,
+            isCardSpecific: isCardSpecific,
+            bankLogoUrl: bankLogoUrl,
+            networkLogoUrl: networkLogoUrl,
+            issuer: (issuer != null && issuer.isNotEmpty) ? issuer : null,
+          ),
+        );
       }
-      
+
       _user = _user.copyWith(cards: fetchedCards);
       notifyListeners();
     }
   }
 
-  Future<bool> deleteCard(String userCardId) async {
-    final success = await ApiService.deleteUserCards([userCardId]);
-    if (success) {
+  Future<ApiResult<Map<String, dynamic>>> deleteCard(String userCardId) async {
+    final result = await ApiService.deleteUserCards([userCardId]);
+    if (result.ok) {
       _user.cards.removeWhere((c) => c.id == userCardId);
       notifyListeners();
     }
-    return success;
+    return result;
   }
 
-  void registerPushToken() {
-    ApiService.registerPushToken(
-      token: 'fdgf9SN3Ti2EHg0aHjm5f0:APA91bFg_YP4MsMAbULew5iQvw14VuQuBfmt0M1ojp4OIGB_0UanzyV8PtTwPUsr_98Nx6e3HuGQ8Sw_z5hxivm9MyKHTM57NVYSGf-VJuaR85h1D97moYg',
-      deviceType: 'ANDROID',
-      deviceName: 'Flutter Test Device',
+  /// Registers this device for push.
+  ///
+  /// The token is requested from Firebase rather than hardcoded — a fixed
+  /// token means every install registers as the same device, so notifications
+  /// go to whoever registered it first and nobody else is reachable.
+  Future<void> registerPushToken() async {
+    final token = await NotificationService.requestPermissionAndGetToken();
+    if (token == null || token.isEmpty) {
+      LoggerService.info('Push not registered: permission denied or no token.');
+      return;
+    }
+    await ApiService.registerPushToken(
+      token: token,
+      deviceType: DeviceService.platformLabel,
+      deviceName: await DeviceService.deviceName(),
     );
   }
 }

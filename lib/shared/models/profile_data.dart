@@ -18,22 +18,22 @@ class ProfileData {
   });
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'username': username,
-        'dob': dob,
-        'email': email,
-        'phone': phone,
-        'avatarColorIndex': avatarColorIndex,
-        'initials': initials,
-      };
+    'name': name,
+    'username': username,
+    'dob': dob,
+    'email': email,
+    'phone': phone,
+    'avatarColorIndex': avatarColorIndex,
+    'initials': initials,
+  };
 
   factory ProfileData.fromJson(Map<String, dynamic> json) => ProfileData(
-        name: json['name'],
-        username: json['username'],
-        dob: json['dob'],
-        email: json['email'],
-        phone: json['phone'],
-        avatarColorIndex: json['avatarColorIndex'],
-        initials: json['initials'],
-      );
+    name: json['name'],
+    username: json['username'],
+    dob: json['dob'],
+    email: json['email'],
+    phone: json['phone'],
+    avatarColorIndex: json['avatarColorIndex'],
+    initials: json['initials'],
+  );
 }

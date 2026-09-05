@@ -1,13 +1,17 @@
-import 'package:flutter/material.dart';
 import 'dart:math' as math;
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/config/remote_config.dart';
 import '../../../core/services/logger_service.dart';
-import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
-import '../../../shared/widgets/gritty_background.dart';
 
+/// v1 screen 01 — Splash. Matches CardCircle.html's splash block: a
+/// breathing gold glow, a gold→teal ring draw, a spark tracer, a single card
+/// flying in, three colored dots popping in sequence, a typewriter
+/// "Card"+"Circle" wordmark, a staggered tagline, and a bottom progress bar
+/// — over the prototype's `splashSeconds` (4.3s) auto-advance.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -17,19 +21,56 @@ class SplashScreen extends StatefulWidget {
 
 class _SplashScreenState extends State<SplashScreen>
     with TickerProviderStateMixin {
-  late AnimationController _controller;
-  late AnimationController _glowController;
-  late AnimationController _cursorController;
+  late final AnimationController _controller;
+  late final AnimationController _glowController;
+  late final AnimationController _cursorController;
 
-  late Animation<double> _ringProgress;
-  late Animation<double> _cardProgress;
-  late Animation<double> _person1Progress;
-  late Animation<double> _person2Progress;
-  late Animation<double> _person3Progress;
-  late Animation<double> _wordmarkProgress;
-  late Animation<double> _taglineProgress;
+  static const Duration _totalDuration = Duration(milliseconds: 4300);
 
-  static const Duration _totalDuration = Duration(milliseconds: 4200);
+  // Timeline intervals as fractions of _totalDuration, matching the
+  // prototype's animation-delay values (ringDraw 0→1.35s, cardFly .55→1.35s,
+  // dotUp at 1.35/1.5/1.65s, typeW at 1.95s and 2.45s, tagline rise at
+  // 3.1/3.3/3.55s).
+  late final Animation<double> _ring = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.0, 0.314, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _card = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.128, 0.314, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _dot1 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.314, 0.430, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _dot2 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.349, 0.465, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _dot3 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.384, 0.500, curve: Curves.easeOutCubic),
+  );
+  late final Animation<double> _wordCard = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.453, 0.570, curve: Curves.linear),
+  );
+  late final Animation<double> _wordCircle = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.570, 0.709, curve: Curves.linear),
+  );
+  late final Animation<double> _tag1 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.721, 0.837, curve: Curves.easeOut),
+  );
+  late final Animation<double> _tag2 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.767, 0.884, curve: Curves.easeOut),
+  );
+  late final Animation<double> _tag3 = CurvedAnimation(
+    parent: _controller,
+    curve: const Interval(0.826, 0.942, curve: Curves.easeOut),
+  );
 
   @override
   void initState() {
@@ -37,116 +78,64 @@ class _SplashScreenState extends State<SplashScreen>
     LoggerService.info('Initializing splash screen sequence...');
 
     _controller = AnimationController(vsync: this, duration: _totalDuration);
-
-    _ringProgress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.0, 0.34, curve: Curves.easeOutCubic),
-    );
-
-    _cardProgress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.24, 0.48, curve: Curves.easeOutCubic),
-    );
-
-    _person1Progress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.42, 0.58, curve: Curves.easeOutCubic),
-    );
-    _person2Progress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.47, 0.63, curve: Curves.easeOutCubic),
-    );
-    _person3Progress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.52, 0.68, curve: Curves.easeOutCubic),
-    );
-
-    _wordmarkProgress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.62, 0.83, curve: Curves.linear),
-    );
-
-    _taglineProgress = CurvedAnimation(
-      parent: _controller,
-      curve: const Interval(0.80, 1.0, curve: Curves.linear),
-    );
-
-    // Slow independent breathing glow behind the whole logo, runs forever.
+    // CSS `breathe 2.8s` is one full 0%->50%->100% cycle; a 1400ms forward +
+    // 1400ms reverse repeat reproduces that 2.8s period exactly.
     _glowController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2600),
+      duration: const Duration(milliseconds: 1400),
     )..repeat(reverse: true);
-
-    // Blinking typewriter cursor, runs forever, only rendered while typing.
     _cursorController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 500),
     )..repeat(reverse: true);
 
-    // Attach listener BEFORE starting the animation
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(milliseconds: 500), () async {
-          if (!mounted) return;
-
-          try {
-            // Call bootstrap config API
-            final config = await ApiService.getBootstrapConfig();
-
-            if (config != null) {
-              final bool maintenanceMode = config['maintenanceMode'] ?? false;
-              final bool forceUpdate = config['forceUpdate'] ?? false;
-
-              if (maintenanceMode) {
-                final message = config['maintenanceMessage'] ??
-                    'We are currently under maintenance. Please try again later.';
-                if (mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => MaintenanceScreen(message: message),
-                    ),
-                  );
-                }
-                return;
-              }
-
-              if (forceUpdate) {
-                if (mounted) {
-                  Navigator.pushReplacement(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ForceUpdateScreen(),
-                    ),
-                  );
-                }
-                return;
-              }
-            }
-          } catch (e) {
-            LoggerService.error('Bootstrap API failed during splash: $e');
-            // Continue routing even if bootstrap fails to avoid app hanging
-          }
-
-          if (!mounted) return;
-
-          final state = Provider.of<AuthState>(context, listen: false);
-          if (!state.hasOnboarded) {
-            LoggerService.info('Redirecting to onboarding.');
-            Navigator.pushReplacementNamed(context, '/onboarding');
-          } else if (!state.hasProfile) {
-            LoggerService.info('Redirecting to login.');
-            Navigator.pushReplacementNamed(context, '/login');
-          } else {
-            LoggerService.info('Redirecting to home.');
-            Navigator.pushReplacementNamed(context, '/home');
-          }
-        });
+        Future.delayed(const Duration(milliseconds: 300), _advance);
       }
     });
 
-    // Start the animation
     _controller.forward();
+  }
+
+  Future<void> _advance() async {
+    if (!mounted) return;
+
+    // The config fetch gates the whole app, so a slow or dead backend must
+    // not strand the user on the splash: refresh() already swallows network
+    // errors and the app falls through to cached/default values.
+    await config.refresh();
+
+    if (!mounted) return;
+    if (config.flag('maintenanceMode')) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              MaintenanceScreen(message: config.text('maintenanceMessage')),
+        ),
+      );
+      return;
+    }
+    if (config.flag('forceUpdate')) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (_) => const ForceUpdateScreen()),
+      );
+      return;
+    }
+
+    final state = Provider.of<AuthState>(context, listen: false);
+    if (!state.hasOnboarded) {
+      LoggerService.info('Redirecting to onboarding.');
+      Navigator.pushReplacementNamed(context, '/onboarding');
+    } else if (!state.hasProfile) {
+      LoggerService.info('Redirecting to login.');
+      Navigator.pushReplacementNamed(context, '/login');
+    } else {
+      LoggerService.info('Redirecting to home.');
+      Navigator.pushReplacementNamed(context, '/home');
+    }
   }
 
   @override
@@ -161,55 +150,261 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: GrittyBackground(
-        child: Center(
-          child: SingleChildScrollView(
-            child: Column(
+      body: Center(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            _controller,
+            _glowController,
+            _cursorController,
+          ]),
+          builder: (context, _) {
+            return Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedBuilder(
-                  animation: Listenable.merge([_controller, _glowController]),
-                  builder: (context, _) {
-                    final double glow = 0.15 + (_glowController.value * 0.15);
-                    return SizedBox(
-                      width: 260,
-                      height: 260,
-                      child: CustomPaint(
-                        painter: _LogoPainter(
-                          ringProgress: _ringProgress.value,
-                          cardProgress: _cardProgress.value,
-                          person1Progress: _person1Progress.value,
-                          person2Progress: _person2Progress.value,
-                          person3Progress: _person3Progress.value,
-                          glowOpacity: glow,
+                SizedBox(
+                  width: 212,
+                  height: 212,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Breathing radial gold glow. CSS: 0%/100% opacity
+                      // .16 scale .96, 50% opacity .34 scale 1.06.
+                      Builder(
+                        builder: (context) {
+                          final t = Curves.easeInOut.transform(
+                            _glowController.value,
+                          );
+                          final opacity = 0.16 + 0.18 * t;
+                          final scale = 0.96 + 0.10 * t;
+                          return Opacity(
+                            opacity: opacity,
+                            child: Transform.scale(
+                              scale: scale,
+                              child: Container(
+                                width: 330,
+                                height: 330,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    // CSS base color is rgba(gold, .5); the
+                                    // outer Opacity multiplies on top of it.
+                                    colors: [
+                                      AppColors.gold.withValues(alpha: 0.5),
+                                      Colors.transparent,
+                                    ],
+                                    stops: const [0.0, 0.66],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                      // Gold -> teal ring draw + spark tracer.
+                      CustomPaint(
+                        size: const Size(212, 212),
+                        painter: _RingPainter(progress: _ring.value),
+                      ),
+                      // Single card flying in.
+                      if (_card.value > 0) _SplashCard(progress: _card.value),
+                      // Three colored dots.
+                      Positioned(
+                        bottom: 24,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _SplashDot(
+                              size: 26,
+                              progress: _dot1.value,
+                              colors: const [AppColors.teal, Color(0xFF1F3B39)],
+                            ),
+                            const SizedBox(width: 10),
+                            _SplashDot(
+                              size: 32,
+                              progress: _dot2.value,
+                              colors: const [
+                                AppColors.goldLight,
+                                AppColors.goldDark,
+                              ],
+                            ),
+                            const SizedBox(width: 10),
+                            _SplashDot(
+                              size: 26,
+                              progress: _dot3.value,
+                              colors: const [
+                                Color(0xFFB5ABFC),
+                                Color(0xFF423A6A),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                    );
-                  },
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 28),
-                AnimatedBuilder(
-                  animation: Listenable.merge([_wordmarkProgress, _cursorController]),
-                  builder: (context, _) {
-                    return _TypewriterWordmark(
-                      progress: _wordmarkProgress.value,
-                      showCursor: _wordmarkProgress.value < 1.0 &&
-                          _cursorController.value > 0.5,
-                    );
-                  },
+                const SizedBox(height: 30),
+                _Wordmark(
+                  cardProgress: _wordCard.value,
+                  circleProgress: _wordCircle.value,
+                  // CSS cursor blinks until `fade .1s 3.1s reverse forwards`
+                  // hides it at 3.2s, not merely until typing finishes.
+                  showCursor:
+                      _controller.value < (3.2 / 4.3) &&
+                      _cursorController.value > 0.5,
                 ),
-                const SizedBox(height: 14),
-                AnimatedBuilder(
-                  animation: Listenable.merge([_taglineProgress, _cursorController]),
-                  builder: (context, _) {
-                    return _TypewriterTagline(
-                      progress: _taglineProgress.value,
-                      showCursor: _taglineProgress.value < 1.0 &&
-                          _cursorController.value > 0.5,
-                    );
-                  },
+                const SizedBox(height: 20),
+                _Tagline(p1: _tag1.value, p2: _tag2.value, p3: _tag3.value),
+                const SizedBox(height: 66),
+                Container(
+                  width: 112,
+                  height: 2,
+                  decoration: BoxDecoration(
+                    color: AppColors.elevated,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: _controller.value.clamp(0.0, 1.0),
+                    child: Container(
+                      height: 2,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [AppColors.goldDark, AppColors.gold],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
               ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _RingPainter extends CustomPainter {
+  final double progress;
+  _RingPainter({required this.progress});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (progress <= 0) return;
+    final center = Offset(size.width / 2, size.height / 2);
+    const radius = 76.0;
+    const strokeWidth = 15.0;
+    const startAngle = -100 * math.pi / 180;
+    // CSS: stroke-dasharray 478, stroke-dashoffset 478 -> 92, so only
+    // (478-92)/478 of the ring's circumference is ever drawn — not a full
+    // circle.
+    const maxSweepFraction = (478.0 - 92.0) / 478.0;
+    final sweep = 2 * math.pi * progress * maxSweepFraction;
+
+    final rect = Rect.fromCircle(center: center, radius: radius);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..shader = const SweepGradient(
+        colors: [AppColors.goldLight, AppColors.gold, AppColors.teal],
+        stops: [0.0, 0.45, 1.0],
+        transform: GradientRotation(-100 * math.pi / 180),
+      ).createShader(rect);
+
+    canvas.drawArc(rect, startAngle, sweep, false, paint);
+
+    if (progress < 1.0) {
+      final tipAngle = startAngle + sweep;
+      final tip = Offset(
+        center.dx + radius * math.cos(tipAngle),
+        center.dy + radius * math.sin(tipAngle),
+      );
+      canvas.drawCircle(
+        tip,
+        8,
+        Paint()
+          ..color = Colors.white.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6),
+      );
+      canvas.drawCircle(tip, 4.5, Paint()..color = Colors.white);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RingPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _SplashCard extends StatelessWidget {
+  final double progress;
+  const _SplashCard({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    // CSS cardFly: 0% translate(-58px,-64px) rotate(-46deg) scale(.42)
+    // opacity 0  ->  100% translate(0,-6px) rotate(-11deg) scale(1) opacity 1.
+    final eased = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0));
+    double lerp(double a, double b) => a + (b - a) * eased;
+    return Opacity(
+      opacity: eased,
+      child: Transform.translate(
+        offset: Offset(lerp(-58, 0), lerp(-64, -6)),
+        child: Transform.rotate(
+          angle: lerp(-46, -11) * math.pi / 180,
+          child: Transform.scale(
+            scale: lerp(0.42, 1.0),
+            child: Container(
+              width: 112,
+              height: 70,
+              padding: const EdgeInsets.fromLTRB(11, 13, 9, 11),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(10),
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [AppColors.border, AppColors.background],
+                  stops: [0.0, 0.62],
+                ),
+                border: Border.all(
+                  color: AppColors.gold.withValues(alpha: 0.55),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.6),
+                    blurRadius: 26,
+                    offset: const Offset(0, 12),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  Container(
+                    width: 17,
+                    height: 13,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(3),
+                      gradient: const LinearGradient(
+                        colors: [AppColors.goldLight, Color(0xFFB28C34)],
+                      ),
+                    ),
+                  ),
+                  const Positioned(
+                    right: 0,
+                    top: -2,
+                    child: Icon(
+                      Icons.wifi_rounded,
+                      size: 14,
+                      color: AppColors.gold,
+                    ),
+                  ),
+                  // Deliberately no card number here — CardCircle never
+                  // asks for or displays one, and the splash sets that
+                  // expectation from the first screen.
+                ],
+              ),
             ),
           ),
         ),
@@ -218,366 +413,158 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
-class _LogoPainter extends CustomPainter {
-  final double ringProgress;
-  final double cardProgress;
-  final double person1Progress;
-  final double person2Progress;
-  final double person3Progress;
-  final double glowOpacity;
+class _SplashDot extends StatelessWidget {
+  final double size;
+  final double progress;
+  final List<Color> colors;
 
-  _LogoPainter({
-    required this.ringProgress,
-    required this.cardProgress,
-    required this.person1Progress,
-    required this.person2Progress,
-    required this.person3Progress,
-    required this.glowOpacity,
+  const _SplashDot({
+    required this.size,
+    required this.progress,
+    required this.colors,
   });
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final Offset center = Offset(size.width / 2, size.height / 2);
-    final double ringRadius = size.width * 0.44;
-
-    // Soft ambient glow
-    final Paint glowPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [const Color(0xFF6C4CE0).withValues(alpha: glowOpacity), Colors.transparent],
-      ).createShader(Rect.fromCircle(center: center, radius: ringRadius * 1.6))
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 20);
-    canvas.drawCircle(center, ringRadius * 1.5, glowPaint);
-
-    // ---- Exact C-Ring Formation ----
-    const double startAngle = -1.1;
-    const double totalSweep = -4.5;
-
-    if (ringProgress > 0) {
-      final double sweep = totalSweep * ringProgress;
-      final double strokeW = size.width * 0.085;
-
-      final Rect ringRect = Rect.fromCircle(center: center, radius: ringRadius);
-      final Paint ringPaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = strokeW
-        ..strokeCap = StrokeCap.round
-        ..shader = const SweepGradient(
-          center: Alignment.center,
-          startAngle: 0,
-          endAngle: math.pi * 2,
-          colors: [
-            Color(0xFFE8B84B), // 0.0 - Gold fallback
-            Color(0xFFE8B84B), // 0.10 - Gold (Bottom Right)
-            Color(0xFF9B51E0), // 0.35 - Magenta/Purple (Bottom Left)
-            Color(0xFF3A2A8C), // 0.50 - Deep Purple (Left)
-            Color(0xFF34C6F4), // 0.65 - Blue (Top Left)
-            Color(0xFF00E5FF), // 0.85 - Cyan (Top Right)
-            Color(0xFF00E5FF), // 1.0 - Cyan fallback
-          ],
-          stops: [0.0, 0.10, 0.35, 0.50, 0.65, 0.85, 1.0],
-        ).createShader(ringRect);
-
-      canvas.drawArc(ringRect, startAngle, sweep, false, ringPaint);
-
-      // Tracer Spark
-      if (ringProgress < 1.0) {
-        final double tipAngle = startAngle + sweep;
-        final Offset tip = Offset(
-          center.dx + ringRadius * math.cos(tipAngle),
-          center.dy + ringRadius * math.sin(tipAngle),
-        );
-        final Paint tracerGlow = Paint()
-          ..color = Colors.white.withValues(alpha: 0.9)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-        canvas.drawCircle(tip, strokeW * 0.55, tracerGlow);
-        canvas.drawCircle(tip, strokeW * 0.3, Paint()..color = Colors.white);
-      }
-    }
-
-    // ---- Matte 3D Card ----
-    if (cardProgress > 0) {
-      final Offset finalPos = Offset(center.dx + size.width * 0.01, center.dy - size.height * 0.05);
-      final Offset startPos = finalPos + Offset(-size.width * 0.75, -size.height * 0.75);
-      final Offset pos = Offset.lerp(startPos, finalPos, cardProgress)!;
-      final double scale = 0.4 + (0.6 * cardProgress);
-      final double rotation = (-45 + (33 * cardProgress)) * math.pi / 180; // Settles at -12deg
-      final double opacity = cardProgress.clamp(0.0, 1.0);
-
-      canvas.save();
-      canvas.translate(pos.dx, pos.dy);
-      canvas.rotate(rotation);
-      canvas.scale(scale);
-
-      final Rect cardRect = Rect.fromCenter(
-        center: Offset.zero,
-        width: size.width * 0.64,
-        height: size.height * 0.42,
-      );
-      final RRect cardRRect = RRect.fromRectAndRadius(cardRect, const Radius.circular(16));
-
-      // 3D Metallic Card Gradient
-      canvas.drawRRect(
-        cardRRect,
-        Paint()
-          ..shader = LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              const Color(0xFF383838).withValues(alpha: opacity),
-              const Color(0xFF111111).withValues(alpha: opacity),
-            ],
-          ).createShader(cardRect),
-      );
-
-      // Golden Edge/Border
-      canvas.drawRRect(
-        cardRRect,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2
-          ..color = const Color(0xFFE8B84B).withValues(alpha: 0.8 * opacity),
-      );
-
-      // EMV Chip
-      final Rect chipRect = Rect.fromLTWH(
-        cardRect.left + 24,
-        cardRect.top + 24,
-        cardRect.width * 0.15,
-        cardRect.height * 0.26,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(chipRect, const Radius.circular(4)),
-        Paint()..color = const Color(0xFFE8B84B).withValues(alpha: opacity),
-      );
-      final Paint chipLine = Paint()
-        ..color = const Color(0xFF111111).withValues(alpha: 0.6 * opacity)
-        ..strokeWidth = 1.2;
-      canvas.drawLine(Offset(chipRect.left, chipRect.center.dy), Offset(chipRect.right, chipRect.center.dy), chipLine);
-      canvas.drawLine(Offset(chipRect.center.dx, chipRect.top), Offset(chipRect.center.dx, chipRect.bottom), chipLine);
-
-      // Contactless Waves
-      final Paint wavePaint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.2
-        ..strokeCap = StrokeCap.round
-        ..color = const Color(0xFFE8B84B).withValues(alpha: opacity);
-      final Offset waveOrigin = Offset(cardRect.right - 28, cardRect.top + 34);
-      for (int i = 0; i < 3; i++) {
-        final double r = 6.0 + i * 6.5;
-        canvas.drawArc(Rect.fromCircle(center: waveOrigin, radius: r), -0.7, 1.4, false, wavePaint);
-      }
-
-      canvas.restore();
-    }
-
-    // ---- 3D Avatars ----
-    final Offset avatarBase = Offset(center.dx - size.width * 0.02, center.dy + size.height * 0.16);
-
-    // Left (Purple)
-    _drawFlyingAvatar(
-      canvas,
-      finalPos: avatarBase + Offset(-size.width * 0.17, -size.height * 0.03),
-      startOffset: Offset(-size.width * 0.9, size.height * 0.1),
-      radius: size.width * 0.08,
-      colors: [const Color(0xFF9B51E0), const Color(0xFF3A2A8C)],
-      progress: person1Progress,
-    );
-    // Right (Cyan)
-    _drawFlyingAvatar(
-      canvas,
-      finalPos: avatarBase + Offset(size.width * 0.17, -size.height * 0.03),
-      startOffset: Offset(size.width * 0.9, size.height * 0.1),
-      radius: size.width * 0.08,
-      colors: [const Color(0xFF00E5FF), const Color(0xFF007788)],
-      progress: person3Progress,
-    );
-    // Center (Gold)
-    _drawFlyingAvatar(
-      canvas,
-      finalPos: avatarBase + Offset(0, size.height * 0.02),
-      startOffset: Offset(0, size.height * 0.85),
-      radius: size.width * 0.11,
-      colors: [const Color(0xFFFFD700), const Color(0xFFB8860B)],
-      progress: person2Progress,
+  Widget build(BuildContext context) {
+    // CSS dotUp: 0% opacity 0 translateY(46px) scale(.3) -> 100% opacity 1
+    // translateY(0) scale(1).
+    final eased = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0));
+    return Opacity(
+      opacity: eased,
+      child: Transform.translate(
+        offset: Offset(0, (1 - eased) * 46),
+        child: Transform.scale(
+          scale: 0.3 + 0.7 * eased,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: colors,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
-
-  void _drawFlyingAvatar(
-      Canvas canvas, {
-        required Offset finalPos,
-        required Offset startOffset,
-        required double radius,
-        required List<Color> colors,
-        required double progress,
-      }) {
-    if (progress <= 0) return;
-    final Offset startPos = finalPos + startOffset;
-    final Offset pos = Offset.lerp(startPos, finalPos, progress)!;
-    final double scale = 0.3 + (0.7 * progress.clamp(0.0, 1.0));
-    final double rotation = (1 - progress) * 25 * math.pi / 180;
-    final double opacity = progress.clamp(0.0, 1.0);
-
-    canvas.save();
-    canvas.translate(pos.dx, pos.dy);
-    canvas.rotate(rotation);
-    canvas.scale(scale);
-
-    final Color c1 = colors[0].withValues(alpha: opacity);
-    final Color c2 = colors[1].withValues(alpha: opacity);
-
-    // 3D Spherical Head
-    final Rect headRect = Rect.fromCircle(center: Offset(0, -radius * 0.55), radius: radius * 0.55);
-    final Paint headPaint = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(-0.3, -0.3),
-        radius: 1.0,
-        colors: [c1, c2],
-      ).createShader(headRect);
-    canvas.drawCircle(headRect.center, headRect.width / 2, headPaint);
-
-    // 3D Body
-    final Rect bodyRect = Rect.fromCenter(center: Offset(0, radius * 0.55), width: radius * 1.8, height: radius * 1.3);
-    final Paint bodyPaint = Paint()
-      ..shader = RadialGradient(
-        center: const Alignment(0, -0.6),
-        radius: 1.2,
-        colors: [c1, c2],
-      ).createShader(bodyRect);
-
-    canvas.drawRRect(
-      RRect.fromRectAndCorners(bodyRect, topLeft: Radius.circular(radius), topRight: Radius.circular(radius)),
-      bodyPaint,
-    );
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(covariant _LogoPainter oldDelegate) => true;
 }
 
-class _TypewriterWordmark extends StatelessWidget {
-  final double progress;
+class _Wordmark extends StatelessWidget {
+  final double cardProgress;
+  final double circleProgress;
   final bool showCursor;
 
-  const _TypewriterWordmark({required this.progress, required this.showCursor});
-
-  static const String _first = 'Card';
-  static const String _second = 'Circle';
+  const _Wordmark({
+    required this.cardProgress,
+    required this.circleProgress,
+    required this.showCursor,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final int totalChars = _first.length + _second.length;
-    final int shown = (progress * totalChars).floor().clamp(0, totalChars);
-
-    final String firstShown = _first.substring(0, math.min(shown, _first.length));
-    final int secondCount = (shown - _first.length).clamp(0, _second.length);
-    final String secondShown = _second.substring(0, secondCount);
-
-    const TextStyle style = TextStyle(
-      fontSize: 46,
-      fontFamily: 'Montserrat', 
-      fontWeight: FontWeight.w700,
-      color: Colors.white,
-      letterSpacing: -0.5,
+    const first = 'Card';
+    const second = 'Circle';
+    final firstShown = first.substring(
+      0,
+      (cardProgress.clamp(0.0, 1.0) * first.length).round(),
+    );
+    final secondShown = second.substring(
+      0,
+      (circleProgress.clamp(0.0, 1.0) * second.length).round(),
     );
 
     return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFFFFFFF), Color(0xFFD0D0D0), Color(0xFF9A9A9A)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ).createShader(bounds),
-          child: Text(firstShown, style: style),
+        Text(
+          firstShown,
+          style: AppText.sans(
+            40,
+            weight: FontWeight.w500,
+            color: AppColors.text,
+            letterSpacing: -1.2,
+          ),
         ),
-        ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFFFFE7B0), Color(0xFFE8B84B), Color(0xFF9A6A10)],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          ).createShader(bounds),
-          child: Text(secondShown, style: style),
+        Text(
+          secondShown,
+          style: AppText.sans(
+            40,
+            weight: FontWeight.w500,
+            color: AppColors.gold,
+            letterSpacing: -1.2,
+          ),
         ),
         if (showCursor)
-          Container(width: 3, height: 42, color: Colors.white, margin: const EdgeInsets.only(left: 4)),
+          Container(
+            width: 2,
+            height: 34,
+            color: AppColors.text,
+            margin: const EdgeInsets.only(left: 3),
+          ),
       ],
     );
   }
 }
 
-class _TypewriterTagline extends StatelessWidget {
-  final double progress;
-  final bool showCursor;
+class _Tagline extends StatelessWidget {
+  final double p1;
+  final double p2;
+  final double p3;
 
-  const _TypewriterTagline({required this.progress, required this.showCursor});
-
-  static const String _line1 = "THE BEST CREDIT CARD HACKS";
-  static const String _line2 = "AREN'T ON BLOGS.";
-  static const List<_Seg> _line3 = [
-    _Seg("THEY'RE IN ", Color(0xFF34C6F4)), // Blue
-    _Seg("YOUR ", Color(0xFF9B51E0)),       // Purple
-    _Seg("FRIEND CIRCLE.", Color(0xFFE8B84B)), // Gold
-  ];
-
-  double _lineProgress(int index) {
-    const double slice = 1 / 3;
-    final double p = (progress - (slice * index)) / slice;
-    return p.clamp(0.0, 1.0);
-  }
+  const _Tagline({required this.p1, required this.p2, required this.p3});
 
   @override
   Widget build(BuildContext context) {
-    const TextStyle base = TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      letterSpacing: 2.5,
-      color: Color(0xFFE0E0E0), 
+    Widget line(double p, Widget child) {
+      return Opacity(
+        opacity: p.clamp(0.0, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, (1 - p.clamp(0.0, 1.0)) * 8),
+          child: child,
+        ),
+      );
+    }
+
+    final style = AppText.mono(
+      10.5,
+      ls: 1.7,
+      c: AppColors.textDim,
+      w: FontWeight.w400,
     );
-
-    final double p1 = _lineProgress(0);
-    final double p2 = _lineProgress(1);
-    final double p3 = _lineProgress(2);
-
-    final String shown1 = _line1.substring(0, (p1 * _line1.length).floor());
-    final String shown2 = _line2.substring(0, (p2 * _line2.length).floor());
 
     return Column(
       children: [
-        Text(shown1, style: base, textAlign: TextAlign.center),
+        line(p1, Text('THE BEST CARD HACKS', style: style)),
         const SizedBox(height: 4),
-        Text(shown2, style: base, textAlign: TextAlign.center),
-        const SizedBox(height: 6),
-        RichText(
-          textAlign: TextAlign.center,
-          text: TextSpan(style: base, children: _buildRevealedSpans(_line3, p3)),
+        line(p2, Text("AREN'T ON BLOGS.", style: style)),
+        const SizedBox(height: 4),
+        line(
+          p3,
+          Text.rich(
+            TextSpan(
+              style: style,
+              children: [
+                const TextSpan(text: "THEY'RE IN "),
+                TextSpan(
+                  text: 'YOUR',
+                  style: style.copyWith(color: AppColors.teal),
+                ),
+                const TextSpan(text: ' '),
+                TextSpan(
+                  text: 'CIRCLE.',
+                  style: style.copyWith(color: AppColors.gold),
+                ),
+              ],
+            ),
+          ),
         ),
-        if (showCursor)
-          Container(width: 2, height: 12, color: Colors.white, margin: const EdgeInsets.only(top: 4)),
       ],
     );
   }
-
-  List<TextSpan> _buildRevealedSpans(List<_Seg> segments, double lineProgress) {
-    final int totalChars = segments.fold(0, (sum, s) => sum + s.text.length);
-    int remaining = (lineProgress * totalChars).floor();
-    final List<TextSpan> spans = [];
-    for (final seg in segments) {
-      if (remaining <= 0) break;
-      final int take = math.min(remaining, seg.text.length);
-      spans.add(TextSpan(text: seg.text.substring(0, take), style: TextStyle(color: seg.color)));
-      remaining -= take;
-    }
-    return spans;
-  }
-}
-
-class _Seg {
-  final String text;
-  final Color color;
-  const _Seg(this.text, this.color);
 }
 
 class MaintenanceScreen extends StatelessWidget {
@@ -594,29 +581,21 @@ class MaintenanceScreen extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.construction,
-                size: 80,
-                color: Color(0xFFFFB300),
-              ),
-              const SizedBox(height: 24),
-              const Text(
+              const Icon(Icons.construction, size: 64, color: AppColors.gold),
+              const SizedBox(height: AppSpacing.xl),
+              Text(
                 'System Maintenance',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
+                style: AppText.sans(
+                  21,
+                  weight: FontWeight.w500,
+                  color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 message,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
+                style: AppText.sans(14, color: AppColors.textDim, height: 1.5),
               ),
             ],
           ),
@@ -641,36 +620,33 @@ class ForceUpdateScreen extends StatelessWidget {
             children: [
               const Icon(
                 Icons.system_update_alt,
-                size: 80,
-                color: Color(0xFF00D4FF),
+                size: 64,
+                color: AppColors.teal,
               ),
-              const SizedBox(height: 24),
-              const Text(
+              const SizedBox(height: AppSpacing.xl),
+              Text(
                 'Update Required',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
+                style: AppText.sans(
+                  21,
+                  weight: FontWeight.w500,
+                  color: AppColors.text,
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
+              const SizedBox(height: AppSpacing.lg),
+              Text(
                 'A new version of CardCircle is available. Please update the application to continue.',
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 16,
-                  height: 1.5,
-                ),
+                style: AppText.sans(14, color: AppColors.textDim, height: 1.5),
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxl),
               NeoPopButton.primary(
-                onPressed: () {
-                  // Mocks opening play store/app store link
-                },
+                onPressed: () {},
                 fullWidth: false,
                 depth: 6.0,
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 16,
+                ),
                 child: const NeoPopButtonText(
                   'Update Now',
                   icon: Icons.update_rounded,

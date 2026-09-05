@@ -251,10 +251,12 @@ class _NeoPopButtonState extends State<NeoPopButton>
         : widget.depth * 0.5;
 
     final Color faceColor = widget.color ?? AppColors.primary;
-    final Color shadowCol = widget.shadowColor ??
+    final Color shadowCol =
+        widget.shadowColor ??
         HSLColor.fromColor(faceColor)
             .withLightness(
-            (HSLColor.fromColor(faceColor).lightness * 0.4).clamp(0.0, 1.0))
+              (HSLColor.fromColor(faceColor).lightness * 0.4).clamp(0.0, 1.0),
+            )
             .toColor();
 
     return GestureDetector(
@@ -266,20 +268,17 @@ class _NeoPopButtonState extends State<NeoPopButton>
         builder: (context, _) {
           final double pressedDepth = depth * (1 - _pressAnimation.value);
           final double translateY = depth * _pressAnimation.value;
-          final double dropShadowOpacity = (1 - _pressAnimation.value).clamp(0.0, 1.0);
+          final double dropShadowOpacity = (1 - _pressAnimation.value).clamp(
+            0.0,
+            1.0,
+          );
 
           return SizedBox(
             width: widget.fullWidth ? double.infinity : null,
             child: Padding(
-              padding: EdgeInsets.only(
-                bottom: depth,
-                right: depth * 0.6,
-              ),
+              padding: EdgeInsets.only(bottom: depth, right: depth * 0.6),
               child: Transform.translate(
-                offset: Offset(
-                  _pressAnimation.value * depth * 0.3,
-                  translateY,
-                ),
+                offset: Offset(_pressAnimation.value * depth * 0.3, translateY),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -289,7 +288,9 @@ class _NeoPopButtonState extends State<NeoPopButton>
                         offset: Offset(0, depth * 1.5),
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(widget.borderRadius),
+                            borderRadius: BorderRadius.circular(
+                              widget.borderRadius,
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: (widget.glowColor ?? shadowCol)
@@ -343,7 +344,11 @@ class _NeoPopButtonState extends State<NeoPopButton>
                               end: Alignment.centerRight,
                               colors: [
                                 shadowCol.withValues(alpha: 0.9),
-                                Color.lerp(shadowCol, Colors.black, 0.15)!.withValues(alpha: 0.9),
+                                Color.lerp(
+                                  shadowCol,
+                                  Colors.black,
+                                  0.15,
+                                )!.withValues(alpha: 0.9),
                               ],
                             ),
                             borderRadius: BorderRadius.only(
@@ -356,16 +361,22 @@ class _NeoPopButtonState extends State<NeoPopButton>
 
                     // Front Face
                     Container(
-                      padding: widget.padding ??
+                      padding:
+                          widget.padding ??
                           const EdgeInsets.symmetric(
-                              vertical: 18, horizontal: 24),
+                            vertical: 18,
+                            horizontal: 24,
+                          ),
                       decoration: BoxDecoration(
                         color: widget.gradient == null ? faceColor : null,
                         gradient: widget.gradient,
-                        borderRadius:
-                        BorderRadius.circular(widget.borderRadius),
+                        borderRadius: BorderRadius.circular(
+                          widget.borderRadius,
+                        ),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: faceColor == Colors.transparent ? 0.0 : 0.1),
+                          color: Colors.white.withValues(
+                            alpha: faceColor == Colors.transparent ? 0.0 : 0.1,
+                          ),
                           width: 1.0,
                         ),
                       ),
@@ -375,14 +386,15 @@ class _NeoPopButtonState extends State<NeoPopButton>
                           opacity: _canPress ? 1.0 : 0.5,
                           child: widget.isLoading
                               ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white),
-                            ),
-                          )
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
                               : widget.child,
                         ),
                       ),
@@ -408,15 +420,15 @@ class NeoPopButtonText extends StatelessWidget {
   final bool iconAfter;
 
   const NeoPopButtonText(
-      this.text, {
-        super.key,
-        this.color = AppColors.darkText,
-        this.fontSize = 16,
-        this.fontWeight = FontWeight.w700,
-        this.letterSpacing = 1.0,
-        this.icon,
-        this.iconAfter = true,
-      });
+    this.text, {
+    super.key,
+    this.color = AppColors.darkText,
+    this.fontSize = 16,
+    this.fontWeight = FontWeight.w700,
+    this.letterSpacing = 1.0,
+    this.icon,
+    this.iconAfter = true,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -434,18 +446,11 @@ class NeoPopButtonText extends StatelessWidget {
       ],
     );
 
-    final textWidget = Text(
-      text.toUpperCase(),
-      style: textStyle,
-    );
+    final textWidget = Text(text.toUpperCase(), style: textStyle);
 
     if (icon == null) return textWidget;
 
-    final iconWidget = Icon(
-      icon,
-      color: color,
-      size: fontSize + 4,
-    );
+    final iconWidget = Icon(icon, color: color, size: fontSize + 4);
 
     return Row(
       mainAxisSize: MainAxisSize.min,

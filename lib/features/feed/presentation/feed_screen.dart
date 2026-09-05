@@ -1,31 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/state/auth_state.dart';
 import '../../circle/state/circle_state.dart';
 import '../../../shared/widgets/gritty_background.dart';
+import '../../../shared/widgets/primitives.dart';
+import '../../../shared/widgets/card_stack.dart';
 
+/// v1 screen 19 — Home: wordmark header with bell + avatar, greeting, and
+/// the fan-out stack of the user's own cards.
+///
+/// Home is deliberately just the wallet. The prototype's "circle today"
+/// strip and missing-benefits nudge were invented numbers — a fixture list
+/// of friends and a savings figure derived from a hash of the card id — and
+/// the benefit-of-the-day card duplicated the Benefits tab, which is where
+/// browsing belongs.
 class FeedScreen extends StatefulWidget {
   final VoidCallback onNavigateToProfile;
 
-  const FeedScreen({
-    super.key,
-    required this.onNavigateToProfile,
-  });
+  const FeedScreen({super.key, required this.onNavigateToProfile});
 
   @override
   State<FeedScreen> createState() => _FeedScreenState();
 }
 
 class _FeedScreenState extends State<FeedScreen> {
+  bool _fanned = false;
+
   Future<void> _handleRefresh() async {
     final authState = Provider.of<AuthState>(context, listen: false);
     final circleState = Provider.of<CircleState>(context, listen: false);
     await Future.wait([
       authState.refreshProfileFromServer(),
+      authState.fetchUserCards(),
       circleState.loadContactsFromDirectory(),
     ]);
+  }
+
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    if (hour < 12) return 'GOOD MORNING';
+    if (hour < 17) return 'GOOD AFTERNOON';
+    return 'GOOD EVENING';
   }
 
   @override
@@ -33,445 +51,267 @@ class _FeedScreenState extends State<FeedScreen> {
     final authState = Provider.of<AuthState>(context);
     final circleState = Provider.of<CircleState>(context);
     final user = authState.user;
-
+    final cards = user.cards;
     return Scaffold(
       backgroundColor: AppColors.background,
       body: GrittyBackground(
         child: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _handleRefresh,
-          color: AppColors.primary,
-          backgroundColor: AppColors.card,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Bar
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Card',
-                            style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                              fontSize: 28,
-                              color: Colors.white,
-                              letterSpacing: -1.0,
-                            ),
-                          ),
-                          Text(
-                            'Circle',
-                            style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                              fontSize: 28,
-                              color: AppColors.primary,
-                              letterSpacing: -1.0,
-                            ),
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          IconButton(
-                            onPressed: () => Navigator.pushNamed(context, '/notifications'),
-                            padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
-                            icon: Stack(
-                              clipBehavior: Clip.none,
-                              children: [
-                                const Icon(
-                                  Icons.notifications_none_rounded,
-                                  color: Colors.white,
-                                  size: 28,
+          child: RefreshIndicator(
+            onRefresh: _handleRefresh,
+            color: AppColors.gold,
+            backgroundColor: AppColors.surface,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.only(bottom: 108),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header: wordmark, bell (unread badge), avatar.
+                  Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xl,
+                          vertical: AppSpacing.md,
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                style: AppText.sans(
+                                  20,
+                                  weight: FontWeight.w500,
+                                  color: AppColors.text,
+                                  letterSpacing: -0.4,
                                 ),
-                                if (circleState.incomingRequests.isNotEmpty)
-                                  Positioned(
-                                    right: -2,
-                                    top: -2,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(4),
-                                      decoration: const BoxDecoration(
-                                        color: Colors.red,
-                                        shape: BoxShape.circle,
-                                      ),
-                                      constraints: const BoxConstraints(
-                                        minWidth: 16,
-                                        minHeight: 16,
-                                      ),
-                                      child: Text(
-                                        circleState.incomingRequests.length.toString(),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                        textAlign: TextAlign.center,
-                                      ),
+                                children: [
+                                  const TextSpan(text: 'Card'),
+                                  TextSpan(
+                                    text: 'Circle',
+                                    style: AppText.sans(
+                                      20,
+                                      weight: FontWeight.w500,
+                                      color: AppColors.gold,
+                                      letterSpacing: -0.4,
                                     ),
                                   ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          GestureDetector(
-                            onTap: widget.onNavigateToProfile,
-                            child: Container(
-                              width: 42,
-                              height: 42,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: AppColors.primary,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.3),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 4),
-                                  )
                                 ],
-                                border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 1.5),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                user.initials,
-                                style: const TextStyle(
-                                  color: AppColors.darkText,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w900,
-                                ),
                               ),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ).animate().fade(duration: 400.ms).slideY(begin: -0.1, curve: Curves.easeOutQuad),
-
-                const SizedBox(height: 10),
-
-                // Welcome Header
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'WELCOME, ${user.name.toUpperCase()}',
-                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        "HERE'S YOUR CARDCIRCLE !",
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontSize: 12,
-                          color: AppColors.mutedForeground,
-                          fontWeight: FontWeight.w400,
-                          letterSpacing: 2.0,
-                        ),
-                      ),
-                    ],
-                  ),
-                ).animate().fade(delay: 150.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
-
-                const SizedBox(height: 24),
-
-                // Two Quick Action Cards
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Row(
-                    children: [
-                      // Refer Friends Card
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16.0),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              width: 1.5,
+                            Row(
+                              children: [
+                                _NotificationBell(
+                                  unreadCount:
+                                      circleState.incomingRequests.length,
+                                  onTap: () => Navigator.pushNamed(
+                                    context,
+                                    '/notifications',
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.md),
+                                GestureDetector(
+                                  onTap: widget.onNavigateToProfile,
+                                  child: AvatarBubble(
+                                    initials: user.initials,
+                                    size: 40,
+                                  ),
+                                ),
+                              ],
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.share_rounded,
-                                  color: AppColors.primary,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Refer Friends',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Earn rewards for each signup',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.mutedForeground,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ],
-                          ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 14),
-                      // Invite Friends Card
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.all(16.0),
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.25),
-                              width: 1.5,
+                      )
+                      .animate()
+                      .fadeIn(duration: 400.ms)
+                      .slideY(begin: 0.06, curve: Curves.easeOutCubic),
+
+                  const SizedBox(height: AppSpacing.md),
+
+                  // Greeting.
+                  Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.xl,
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            MonoLabel(
+                              _greeting(),
+                              size: 9.5,
+                              letterSpacing: 2.0,
+                              color: AppColors.textFaint,
                             ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: AppColors.primary.withValues(alpha: 0.05),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
+                            const SizedBox(height: 7),
+                            Text(
+                              user.name,
+                              style: AppText.sans(
+                                25,
+                                weight: FontWeight.w500,
+                                color: AppColors.text,
+                                letterSpacing: -0.5,
                               ),
-                            ],
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                alignment: Alignment.center,
-                                child: const Icon(
-                                  Icons.mail_outline_rounded,
-                                  color: AppColors.primary,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              const Text(
-                                'Invite Friends',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              const Text(
-                                'Grow your savings circle',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.mutedForeground,
-                                  height: 1.3,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ),
-                    ],
-                  ),
-                ).animate().fade(delay: 250.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
+                      )
+                      .animate()
+                      .fadeIn(duration: 450.ms, delay: 60.ms)
+                      .slideY(begin: 0.06, curve: Curves.easeOutCubic),
 
-                const SizedBox(height: 20),
+                  const SizedBox(height: AppSpacing.xl),
 
-                // Your Circle Stats Card
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.symmetric(horizontal: 16.0),
-                  padding: const EdgeInsets.all(20.0),
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppColors.border,
-                      width: 1,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 15,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Your Circle Stats',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  // Card stack.
+                  //
+                  // The header keeps the page's gutter; the cards themselves
+                  // sit in a narrower one so the plates read as large as the
+                  // screen allows.
+                  Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Following
-                          Expanded(
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.xl,
+                            ),
                             child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.cyan.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.group_outlined,
-                                    color: AppColors.cyan,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  '${user.followingCount}',
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Following',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground,
-                                  ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    MonoLabel(
+                                      'YOUR CARDS · ${cards.length}',
+                                      size: 9.5,
+                                      letterSpacing: 1.8,
+                                      color: AppColors.textFaint,
+                                    ),
+                                    if (cards.isNotEmpty)
+                                      GestureDetector(
+                                        onTap: () =>
+                                            setState(() => _fanned = !_fanned),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text(
+                                              _fanned ? 'Collapse' : 'Fan out',
+                                              style: AppText.sans(
+                                                11.5,
+                                                color: AppColors.gold,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Icon(
+                                              _fanned
+                                                  ? PhosphorIconsRegular
+                                                        .arrowsInLineVertical
+                                                  : PhosphorIconsRegular
+                                                        .arrowsOutLineVertical,
+                                              size: 13,
+                                              color: AppColors.gold,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
-                          // Followers
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.purple.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.person_outline_rounded,
-                                    color: AppColors.purple,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  '${user.followersCount}',
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Followers',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground,
-                                  ),
-                                ),
-                              ],
+                          const SizedBox(height: AppSpacing.mdLg),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
                             ),
-                          ),
-                          // Contacts
-                          Expanded(
-                            child: Column(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: const Icon(
-                                    Icons.credit_card_outlined,
-                                    color: AppColors.primary,
-                                    size: 20,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  '${user.friendsCount}',
-                                  style: const TextStyle(
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Contacts',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.mutedForeground,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            child: CardStack(cards: cards, fanned: _fanned),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
-                ).animate().fade(delay: 350.ms, duration: 400.ms).slideY(begin: 0.05, curve: Curves.easeOutQuad),
+                      )
+                      .animate()
+                      .fadeIn(duration: 450.ms, delay: 120.ms)
+                      .slideY(begin: 0.06, curve: Curves.easeOutCubic),
 
-                const SizedBox(height: 40),
-              ],
+                  const SizedBox(height: AppSpacing.xxl),
+
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.xl,
+                      AppSpacing.xxl,
+                      AppSpacing.xl,
+                      0,
+                    ),
+                    child: Text(
+                      "You're seeing benefits matched to ${cards.length} card${cards.length == 1 ? '' : 's'}.",
+                      textAlign: TextAlign.center,
+                      style: AppText.sans(
+                        11,
+                        color: AppColors.textGhost,
+                        height: 1.6,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 }
+
+class _NotificationBell extends StatelessWidget {
+  final int unreadCount;
+  final VoidCallback onTap;
+
+  const _NotificationBell({required this.unreadCount, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: AppColors.surface,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: const Icon(
+              PhosphorIconsRegular.bell,
+              size: 19,
+              color: AppColors.text,
+            ),
+          ),
+          if (unreadCount > 0)
+            Positioned(
+              top: 6,
+              right: 7,
+              child: Container(
+                constraints: const BoxConstraints(minWidth: 15, minHeight: 15),
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.gold,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppColors.background, width: 2),
+                ),
+                child: Text(
+                  '$unreadCount',
+                  style: AppText.mono(
+                    8.5,
+                    ls: 0,
+                    w: FontWeight.w700,
+                    c: AppColors.background,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

@@ -3,10 +3,19 @@ import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
-import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/models/card_material.dart';
+import '../../../shared/widgets/card_plate.dart';
 import '../../../shared/widgets/gritty_background.dart';
-import '../../../shared/widgets/catalog_card_visual.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/primitives.dart';
 
+/// v1 screen 09 — Add cards: back + step indicator, search bar, a flat
+/// toggleable list of cards, and a bottom summary bar with the "Enter
+/// CardCircle" / "Add" GoldButton CTA.
+///
+/// This is the last of the three registration steps (profile, categories,
+/// cards), and is also reachable from Profile to add another card later —
+/// `fromProfile` only changes where the CTA returns to.
 class SelectCardsScreen extends StatefulWidget {
   const SelectCardsScreen({super.key});
 
@@ -21,27 +30,65 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
   bool _fromProfile = false;
   bool _initialized = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (!_initialized) {
-      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-      _fromProfile = args?['fromProfile'] ?? false;
-      _initialized = true;
-    }
-  }
-  
-  // Track selected cards as maps of { 'card_id': id, 'bank_name': bank, 'card_name': name }
   final List<Map<String, dynamic>> _selectedCards = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
 
   bool _loadingBanks = true;
   bool _loadingCards = false;
   bool _saving = false;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      final args =
+          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      _fromProfile = args?['fromProfile'] ?? false;
+      _initialized = true;
+    }
+  }
+
+  @override
   void initState() {
     super.initState();
+    _searchController.addListener(() {
+      final next = _searchController.text.trim().toLowerCase();
+      if (next != _query) setState(() => _query = next);
+    });
     _fetchBanks();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Cards matching the current query.
+  ///
+  /// The catalog is fetched one bank at a time, so this filters within the
+  /// selected bank rather than pretending to search the whole catalog —
+  /// a cross-bank search would need a search parameter on the browse
+  /// endpoint.
+  List<Map<String, dynamic>> get _visibleCards {
+    if (_query.isEmpty) return _availableCards;
+    return _availableCards.where((card) {
+      final info = (card['card'] as Map?)?.cast<String, dynamic>() ?? const {};
+      final name = (info['name'] as String?)?.toLowerCase() ?? '';
+      final issuer = (info['issuer'] as String?)?.toLowerCase() ?? '';
+      final network = (info['network'] as String?)?.toLowerCase() ?? '';
+      return name.contains(_query) ||
+          issuer.contains(_query) ||
+          network.contains(_query);
+    }).toList();
+  }
+
+  String get _selectedBankName {
+    for (final bank in _banks) {
+      if (bank['id'] == _selectedBankId) return (bank['name'] as String?) ?? '';
+    }
+    return '';
   }
 
   Future<void> _fetchBanks() async {
@@ -104,52 +151,29 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
   }
 
   Future<void> _handleFinish() async {
-    if (_saving) return;
+    if (_saving || _selectedCards.isEmpty) return;
 
-    if (_selectedCards.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select at least one card to finalize your wallet setup.'),
-          backgroundColor: Colors.amber,
-        ),
+    setState(() => _saving = true);
+    final result = await ApiService.addUserCards(_selectedCards);
+    if (!mounted) return;
+    setState(() => _saving = false);
+
+    if (!result.ok) {
+      AppSnackbar.error(
+        context,
+        result.display('Could not save your cards. Please try again.'),
       );
       return;
     }
 
-    setState(() {
-      _saving = true;
-    });
-
-    final success = await ApiService.addUserCards(_selectedCards);
-    
-    setState(() {
-      _saving = false;
-    });
-
-    if (mounted) {
-      if (success) {
-        final authState = Provider.of<AuthState>(context, listen: false);
-        await authState.fetchUserCards();
-        if (mounted) {
-          if (_fromProfile) {
-            Navigator.pop(context);
-          } else {
-            Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
-          }
-        }
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to save cards. Please try again.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
+    final authState = Provider.of<AuthState>(context, listen: false);
+    await authState.fetchUserCards();
+    if (!mounted) return;
+    if (_fromProfile) {
+      Navigator.pop(context);
+    } else {
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
     }
-  }
-
-  void _handleSkip() {
-    Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
   }
 
   @override
@@ -159,231 +183,407 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       body: GrittyBackground(
         child: SafeArea(
           child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  if (_fromProfile)
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-                      onPressed: () => Navigator.pop(context),
-                    )
-                  else
-                    const SizedBox(width: 48), // Spacer to balance Skip button
-                  
-                  if (!_fromProfile)
-                    // Step indicator
+            children: [
+              // Header: back, step label, progress bar, title/subtitle, search.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                  AppSpacing.xl,
+                  AppSpacing.mdLg,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        // Dot 1 (Completed)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: AppColors.secondary,
-                            shape: BoxShape.circle,
-                          ),
+                        // Back works in both entry paths: during
+                        // registration it returns to the categories step,
+                        // and from Profile it returns to Profile.
+                        IconTile(
+                          icon: Icons.arrow_back_ios_new_rounded,
+                          iconSize: 15,
+                          onTap: () => Navigator.pop(context),
                         ),
-                        // Line 1
-                        Container(
-                          width: 30,
-                          height: 3,
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary,
-                            borderRadius: BorderRadius.circular(2),
+                        if (!_fromProfile)
+                          const MonoLabel(
+                            'Step 3 of 3',
+                            size: 9.5,
+                            letterSpacing: 1.6,
+                            color: AppColors.textFaint,
                           ),
-                        ),
-                        // Dot 2 (Completed)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: AppColors.secondary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        // Line 2
-                        Container(
-                          width: 30,
-                          height: 3,
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.secondary,
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                        // Dot 3 (Active)
-                        Container(
-                          width: 10,
-                          height: 10,
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
                       ],
                     ),
-
-                  if (!_fromProfile)
-                    TextButton(
-                      onPressed: _handleSkip,
-                      child: const Text(
-                        'Skip',
-                        style: TextStyle(
-                          color: AppColors.mutedForeground,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    if (!_fromProfile) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      const StepProgressBar(currentStep: 3),
+                    ],
+                    const SizedBox(height: AppSpacing.xl),
+                    Text(
+                      'Add your cards',
+                      style: AppText.sans(
+                        27,
+                        weight: FontWeight.w500,
+                        color: AppColors.text,
+                        letterSpacing: -0.6,
                       ),
-                    )
-                  else
-                    const SizedBox(width: 48),
-                ],
-              ),
-            ),
-            const SizedBox(height: 12),
-            if (!_fromProfile) ...[
-              const Text(
-                'Step 3 of 3 — Cards Setup',
-                style: TextStyle(
-                  color: AppColors.mutedForeground,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-            const Text(
-              'Select your credit cards',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w700,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 32.0),
-              child: Text(
-                'Add the cards you currently carry. We will show you hacks and saving recommendations for them.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: AppColors.mutedForeground,
-                  height: 1.4,
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            // Bank Selector
-            if (!_loadingBanks && _banks.isNotEmpty)
-              SizedBox(
-                height: 44,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  itemCount: _banks.length,
-                  itemBuilder: (context, index) {
-                    final bank = _banks[index];
-                    final bankId = bank['id'] as String?;
-                    final bankName = (bank['name'] as String?) ?? '';
-                    final logoUrl = bank['logo'] as String?;
-                    final isSelected = _selectedBankId == bankId;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: ChoiceChip(
-                        label: BankLogoChipContent(
-                          bankName: bankName,
-                          logoUrl: logoUrl,
-                          isSelected: isSelected,
-                        ),
-                        selected: isSelected,
-                        onSelected: (selected) {
-                          if (selected && bankId != null) {
-                            setState(() {
-                              _selectedBankId = bankId;
-                            });
-                            _fetchCardsForBank(bankName);
-                          }
-                        },
-                        selectedColor: AppColors.primary,
-                        backgroundColor: AppColors.card,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      'Names only — no numbers, no bank login.',
+                      style: AppText.sans(13, color: AppColors.textDim),
+                    ),
+                    const SizedBox(height: AppSpacing.lg),
+                    OutlinedSurface(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.mdLg,
                       ),
-                    );
-                  },
-                ),
-              ),
-            const SizedBox(height: 16),
-            // Cards Grid View
-            Expanded(
-              child: _loadingBanks || _loadingCards
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                      ),
-                    )
-                  : (_availableCards.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No cards available for this bank.',
-                            style: TextStyle(color: AppColors.mutedForeground),
-                          ),
-                        )
-                      : ListView.separated(
-                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                          itemCount: _availableCards.length,
-                          separatorBuilder: (context, index) => const SizedBox(height: 12),
-                          itemBuilder: (context, index) {
-                            final card = _availableCards[index];
-                            final id = card['id'] ?? '';
-                            final isSelected = _isCardSelected(id);
-
-                            return GestureDetector(
-                              onTap: () => _toggleCard(card),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                child: AspectRatio(
-                                  // Matches the catalog's card artwork ratio
-                                  // (500x317) so BoxFit.cover fills the slot
-                                  // exactly with no cropping or letterboxing.
-                                  aspectRatio: 500 / 317,
-                                  child: CatalogCardVisual(
-                                    cardData: card,
-                                    isSelected: isSelected,
+                      child: SizedBox(
+                        height: 46,
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.search,
+                              size: 16,
+                              color: AppColors.textFaint,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Expanded(
+                              child: TextField(
+                                controller: _searchController,
+                                textInputAction: TextInputAction.search,
+                                style: AppText.sans(
+                                  13.5,
+                                  color: AppColors.text,
+                                ),
+                                decoration: InputDecoration.collapsed(
+                                  hintText: _selectedBankName.isEmpty
+                                      ? 'Search cards'
+                                      : 'Search $_selectedBankName cards',
+                                  hintStyle: AppText.sans(
+                                    13.5,
+                                    color: AppColors.textFaint,
                                   ),
                                 ),
                               ),
-                            );
-                          },
-                        )),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: NeoPopButton.primary(
-                onPressed: _selectedCards.isNotEmpty && !_saving ? _handleFinish : null,
-                isLoading: _saving,
-                enabled: _selectedCards.isNotEmpty && !_saving,
-                depth: 6.0,
-                child: NeoPopButtonText(
-                  'Finish Setup',
-                  color: _selectedCards.isNotEmpty && !_saving ? AppColors.darkText : Colors.black,
-                  icon: Icons.check_circle_rounded,
+                            ),
+                            if (_query.isNotEmpty)
+                              GestureDetector(
+                                onTap: _searchController.clear,
+                                child: const Icon(
+                                  Icons.close_rounded,
+                                  size: 15,
+                                  color: AppColors.textFaint,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-          ],
+
+              // Bank filter pills — needed because cards come from a live
+              // per-bank catalog API rather than one flat fixture list.
+              if (!_loadingBanks && _banks.isNotEmpty)
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.xl,
+                    ),
+                    itemCount: _banks.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(width: AppSpacing.sm),
+                    itemBuilder: (context, index) {
+                      final bank = _banks[index];
+                      final bankId = bank['id'] as String?;
+                      final bankName = (bank['name'] as String?) ?? '';
+                      final isSelected = _selectedBankId == bankId;
+                      return FilterPill(
+                        label: bankName,
+                        selected: isSelected,
+                        onTap: () {
+                          if (bankId == null) return;
+                          setState(() => _selectedBankId = bankId);
+                          _fetchCardsForBank(bankName);
+                        },
+                      );
+                    },
+                  ),
+                ),
+              const SizedBox(height: AppSpacing.sm),
+
+              // Card list.
+              Expanded(
+                child: _loadingBanks || _loadingCards
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.gold,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : (_visibleCards.isEmpty
+                          ? Center(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.xxl,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      _query.isEmpty
+                                          ? Icons.check_circle_outline_rounded
+                                          : Icons.search_off_rounded,
+                                      size: 28,
+                                      color: AppColors.teal.withValues(
+                                        alpha: 0.8,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      _query.isEmpty
+                                          ? "You've added every card from this bank."
+                                          : 'No cards match "$_query" in $_selectedBankName.',
+                                      textAlign: TextAlign.center,
+                                      style: AppText.sans(
+                                        13,
+                                        color: AppColors.textDim,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(
+                                AppSpacing.xl,
+                                0,
+                                AppSpacing.xl,
+                                AppSpacing.mdLg,
+                              ),
+                              itemCount: _visibleCards.length,
+                              separatorBuilder: (context, index) =>
+                                  const SizedBox(height: AppSpacing.sm),
+                              itemBuilder: (context, index) => _CardRow(
+                                card: _visibleCards[index],
+                                isSelected: _isCardSelected(
+                                  _visibleCards[index]['id'] ?? '',
+                                ),
+                                onTap: () => _toggleCard(_visibleCards[index]),
+                              ),
+                            )),
+              ),
+
+              // Bottom summary + CTA.
+              Container(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.mdLg,
+                  AppSpacing.xl,
+                  AppSpacing.xl,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, AppColors.background],
+                    stops: [0.0, 0.34],
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        MonoLabel(
+                          '${_selectedCards.length} CARD${_selectedCards.length == 1 ? '' : 'S'} ADDED',
+                          size: 10,
+                          letterSpacing: 1.3,
+                          color: AppColors.textFaint,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    GoldButton(
+                      label: 'Enter CardCircle',
+                      icon: Icons.arrow_forward,
+                      enabled: _selectedCards.isNotEmpty,
+                      loading: _saving,
+                      onTap: _handleFinish,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+class _CardRow extends StatelessWidget {
+  final Map<String, dynamic> card;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _CardRow({
+    required this.card,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Map<String, dynamic> cardInfo =
+        (card['card'] as Map?)?.cast<String, dynamic>() ?? {};
+    final String name = cardInfo['name'] ?? '';
+    final String issuer = cardInfo['issuer'] ?? '';
+    final String cardType = cardInfo['card_type'] ?? '';
+    final String network = cardInfo['network'] ?? '';
+
+    // The catalog already carries every image this row needs; nothing is
+    // resolved from bundled assets any more.
+    String? url(String key) {
+      final v = card[key];
+      if (v is Map) {
+        final u = v['url'];
+        if (u is String && u.isNotEmpty) return u;
+      }
+      return null;
+    }
+
+    final String? imageUrl = url('image');
+    final bool isCardSpecific =
+        (card['image'] as Map?)?['is_card_specific'] == true;
+    final String? bankLogoUrl = url('bank_logo');
+    final String? networkLogoUrl = url('network_logo');
+
+    final String bankId = (card['bank_id'] as String?) ?? '';
+
+    return OutlinedSurface(
+      onTap: onTap,
+      background: isSelected
+          ? AppColors.gold.withValues(alpha: 0.07)
+          : AppColors.surface,
+      borderColor: isSelected
+          ? AppColors.gold.withValues(alpha: 0.55)
+          : AppColors.border,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.mdLg,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
+        children: [
+          _CardThumb(
+            bankId: bankId,
+            bankName: issuer,
+            cardName: name,
+            cardType: cardType,
+            network: network,
+            artworkUrl: imageUrl,
+            isCardSpecific: isCardSpecific,
+            bankLogoUrl: bankLogoUrl,
+            networkLogoUrl: networkLogoUrl,
+          ),
+          const SizedBox(width: AppSpacing.mdLg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  style: AppText.sans(
+                    13.5,
+                    weight: FontWeight.w500,
+                    color: AppColors.text,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                MonoLabel(
+                  issuer,
+                  size: 9.5,
+                  letterSpacing: 1.1,
+                  color: AppColors.textFaint,
+                  uppercase: false,
+                ),
+              ],
+            ),
+          ),
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: isSelected ? AppColors.gold : AppColors.elevated,
+            ),
+            child: Icon(
+              isSelected ? Icons.check : Icons.add,
+              size: 15,
+              color: isSelected ? AppColors.background : AppColors.textDim,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Row leading thumbnail — a miniature of the wallet card face.
+///
+/// Deliberately the same widget the wallet uses, fed the same catalog URLs,
+/// so the card you pick here is visibly the same object you then see in Your
+/// Cards. It runs in compact mode: at 46px the product name is unreadable,
+/// and the row already prints it alongside.
+class _CardThumb extends StatelessWidget {
+  final String bankId;
+  final String bankName;
+  final String cardName;
+  final String cardType;
+  final String network;
+  final String? artworkUrl;
+  final bool isCardSpecific;
+  final String? bankLogoUrl;
+  final String? networkLogoUrl;
+
+  const _CardThumb({
+    required this.bankId,
+    required this.bankName,
+    required this.cardName,
+    required this.cardType,
+    required this.network,
+    required this.artworkUrl,
+    required this.isCardSpecific,
+    required this.bankLogoUrl,
+    required this.networkLogoUrl,
+  });
+
+  static const double _height = 46;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: _height,
+      width: _height * kCardImageAspectRatio,
+      child: CardPlate(
+        artworkUrl: artworkUrl,
+        isCardSpecific: isCardSpecific,
+        bankLogoUrl: bankLogoUrl,
+        name: cardName,
+        networkLogoUrl: networkLogoUrl,
+        network: network,
+        bankId: bankId,
+        bankName: bankName,
+        material: cardMaterialFor(name: cardName, cardType: cardType),
+        compact: true,
+        height: _height,
       ),
     );
   }
