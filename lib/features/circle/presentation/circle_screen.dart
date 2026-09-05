@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/logger_service.dart';
 import '../../../core/services/contacts_service.dart';
 import '../../../core/services/device_service.dart';
 import '../../auth/state/auth_state.dart';
@@ -600,28 +602,42 @@ class _CircleScreenState extends State<CircleScreen> {
                                             color: AppColors.text,
                                           ),
                                         ),
-                                        const SizedBox(height: 1),
-                                        Text(
-                                          friend.id,
-                                          style: AppText.sans(
-                                            11,
-                                            color: AppColors.textDim,
+                                        // The number, never the contact id —
+                                        // a raw UUID under someone's name
+                                        // identifies nothing and reads as a
+                                        // bug. Omitted entirely when the
+                                        // directory sent none, rather than
+                                        // leaving a blank second line.
+                                        if (friend.mobileNumber.isNotEmpty) ...[
+                                          const SizedBox(height: 1),
+                                          Text(
+                                            friend.mobileNumber,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppText.sans(
+                                              11,
+                                              color: AppColors.textDim,
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ],
                                     ),
                                   ),
                                   const SizedBox(width: AppSpacing.sm),
                                   GestureDetector(
-                                    onTap: () => ScaffoldMessenger.of(context)
-                                        .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Invitation link sent to ${friend.name}!',
-                                            ),
-                                            backgroundColor: AppColors.teal,
-                                          ),
-                                        ),
+                                    // Previously claimed "Invitation link
+                                    // sent" without sending anything. It
+                                    // now asks the server for the WhatsApp
+                                    // link and hands off to WhatsApp, which
+                                    // is where the message is actually
+                                    // written and sent.
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _handleInvite(
+                                        friend.contactId,
+                                        friend.name,
+                                      );
+                                    },
                                     child: Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 14,
@@ -1014,10 +1030,12 @@ class _CircleScreenState extends State<CircleScreen> {
                 : rows[i].username,
             trailing: _ContactAction(
               action: rows[i].action,
-              busy: _pendingFollowIds.contains(rows[i].id),
+              busy:
+                  _pendingFollowIds.contains(rows[i].id) ||
+                  _invitingIds.contains(rows[i].contactId),
               onFollow: () => _handleToggleFollow(rows[i].id, rows[i].name),
               onRespond: () => setState(() => _tabIndex = 2),
-              onInvite: () => _showInviteFriendsBottomSheet(context),
+              onInvite: () => _handleInvite(rows[i].contactId, rows[i].name),
             ),
           ),
       ],
@@ -1028,6 +1046,49 @@ class _CircleScreenState extends State<CircleScreen> {
     final s = (name ?? '').toString().trim();
     if (s.isEmpty) return 'C';
     return s[0].toUpperCase();
+  }
+
+  /// Ids with an invite request in flight, so a double-tap cannot burn the
+  /// contact's 24-hour cooldown on a second call.
+  final Set<String> _invitingIds = {};
+
+  /// Invites a contact who is not on CardCircle yet.
+  ///
+  /// The server sends nothing itself — it returns a `wa.me` link with a
+  /// prefilled message, which the user sends from WhatsApp. So a successful
+  /// response is only half the job: the link has to open, and a failure to
+  /// open must be reported rather than leaving the user thinking an invite
+  /// went out.
+  Future<void> _handleInvite(String contactId, String name) async {
+    if (contactId.isEmpty || _invitingIds.contains(contactId)) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _invitingIds.add(contactId));
+    final result = await ApiService.inviteContact(contactId);
+    if (!mounted) return;
+    setState(() => _invitingIds.remove(contactId));
+
+    if (!result.ok) {
+      // 429 cooldown, 400 already registered, 404 unknown contact — the
+      // server explains each one, so show what it said.
+      messenger.showError(result.display('Could not invite $name right now.'));
+      return;
+    }
+
+    final url = (result.data?['whatsapp_url'] ?? '').toString();
+    final uri = url.isEmpty ? null : Uri.tryParse(url);
+    if (uri == null) {
+      messenger.showError('The invite link for $name was unreadable.');
+      return;
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      if (!opened) messenger.showError('Could not open WhatsApp.');
+    } catch (e, stack) {
+      LoggerService.error('Failed to open invite link', e, stack);
+      messenger.showError('Could not open WhatsApp.');
+    }
   }
 
   Future<void> _handleUnfollow(String userId, String name) async {

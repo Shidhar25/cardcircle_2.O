@@ -7,6 +7,7 @@ import 'package:cardcircle/shared/models/friend.dart';
 
 Friend _friend(ContactAction action) => Friend(
   id: 'u1',
+  contactId: 'c1',
   name: 'Riya',
   username: '@riya',
   initials: 'R',
@@ -90,6 +91,9 @@ void main() {
       final before = _friend(ContactAction.follow);
       final after = before.withAction(ContactAction.following);
       expect(after.id, before.id);
+      // Invites address the contact, not the user, so this must survive a
+      // relationship change.
+      expect(after.contactId, before.contactId);
       expect(after.name, before.name);
       expect(after.initials, before.initials);
       expect(after.commonCards, before.commonCards);
