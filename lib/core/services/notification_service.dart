@@ -8,7 +8,7 @@ class NotificationService {
   static Future<String?> requestPermissionAndGetToken() async {
     try {
       LoggerService.info('Requesting push notification permissions...');
-      
+
       // Request permission for alert, badge, and sound notifications
       NotificationSettings settings = await _messaging.requestPermission(
         alert: true,
@@ -20,20 +20,27 @@ class NotificationService {
         sound: true,
       );
 
-      LoggerService.info('Notification authorization status: ${settings.authorizationStatus}');
+      LoggerService.info(
+        'Notification authorization status: ${settings.authorizationStatus}',
+      );
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized ||
           settings.authorizationStatus == AuthorizationStatus.provisional) {
-        
         // Fetch the Firebase Messaging token for this device
         String? token = await _messaging.getToken();
-        LoggerService.info('FCM Registration Token retrieved successfully: $token');
+        LoggerService.info(
+          'FCM Registration Token retrieved successfully: $token',
+        );
         return token;
       } else {
         LoggerService.warning('User declined push notification permissions.');
       }
     } catch (e, stack) {
-      LoggerService.error('Failed to request notification permission or fetch token', e, stack);
+      LoggerService.error(
+        'Failed to request notification permission or fetch token',
+        e,
+        stack,
+      );
     }
     return null;
   }

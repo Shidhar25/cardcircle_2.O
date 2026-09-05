@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// Note: Ensure your AppColors are correctly imported
-// import '../../core/theme/app_theme.dart';
+import '../../core/theme/app_theme.dart';
 
 enum NeoPopButtonStyle { elevated, flat, link }
 
@@ -61,7 +60,7 @@ class NeoPopButton extends StatefulWidget {
     this.glowColor,
   });
 
-  /// Primary CTA (Vibrant gradient, deep elevated look)
+  /// Primary CTA (Vibrant Lime surface, deep elevated look)
   factory NeoPopButton.primary({
     Key? key,
     required Widget child,
@@ -76,14 +75,10 @@ class NeoPopButton extends StatefulWidget {
       key: key,
       onPressed: onPressed,
       style: NeoPopButtonStyle.elevated,
-      gradient: const LinearGradient(
-        colors: [Color(0xFF00E5FF), Color(0xFF007799)],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ),
-      shadowColor: const Color(0xFF004455),
+      color: AppColors.primary,
+      shadowColor: AppColors.primary.withValues(alpha: 0.6),
       shimmerColor: Colors.white.withValues(alpha: 0.5),
-      glowColor: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+      glowColor: AppColors.primary.withValues(alpha: 0.2),
       depth: depth,
       isLoading: isLoading,
       enabled: enabled,
@@ -106,9 +101,9 @@ class NeoPopButton extends StatefulWidget {
       key: key,
       onPressed: onPressed,
       style: NeoPopButtonStyle.flat,
-      color: const Color(0xFF1A1A1A), // Replace with AppColors.elevated
-      shadowColor: const Color(0xFF050505),
-      shimmerColor: Colors.white.withValues(alpha: 0.15),
+      color: AppColors.elevated,
+      shadowColor: Colors.black.withValues(alpha: 0.8),
+      shimmerColor: Colors.white.withValues(alpha: 0.1),
       depth: 4.0,
       isLoading: isLoading,
       enabled: enabled,
@@ -125,15 +120,16 @@ class NeoPopButton extends StatefulWidget {
     bool isLoading = false,
     bool enabled = true,
     bool fullWidth = true,
-    Color borderColor = const Color(0xFF00E5FF), // Replace with AppColors.primary
+    Color? borderColor,
   }) {
+    final Color border = borderColor ?? AppColors.primary;
     return NeoPopButton(
       key: key,
       onPressed: onPressed,
       style: NeoPopButtonStyle.flat,
       color: Colors.transparent,
-      shadowColor: borderColor.withValues(alpha: 0.4),
-      glowColor: borderColor.withValues(alpha: 0.1),
+      shadowColor: border.withValues(alpha: 0.4),
+      glowColor: border.withValues(alpha: 0.1),
       depth: 3.0,
       isLoading: isLoading,
       enabled: enabled,
@@ -172,7 +168,6 @@ class _NeoPopButtonState extends State<NeoPopButton>
   @override
   void initState() {
     super.initState();
-    // Asymmetric animation: Fast press down, bouncy release
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 80),
@@ -182,7 +177,7 @@ class _NeoPopButtonState extends State<NeoPopButton>
       CurvedAnimation(
         parent: _controller,
         curve: Curves.easeOutCubic,
-        reverseCurve: Curves.easeOutBack, // Adds the premium tactile pop
+        reverseCurve: Curves.easeOutBack,
       ),
     );
   }
@@ -227,7 +222,6 @@ class _NeoPopButtonState extends State<NeoPopButton>
     return _buildDepthButton();
   }
 
-  // ─── Link Button ─────────────────────────────────────────
   Widget _buildLinkButton() {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -251,17 +245,18 @@ class _NeoPopButtonState extends State<NeoPopButton>
     );
   }
 
-  // ─── Elevated / Flat Depth Button ────────────────────────
   Widget _buildDepthButton() {
     final double depth = widget.style == NeoPopButtonStyle.elevated
         ? widget.depth
         : widget.depth * 0.5;
 
-    final Color faceColor = widget.color ?? Colors.blueAccent;
-    final Color shadowCol = widget.shadowColor ??
+    final Color faceColor = widget.color ?? AppColors.primary;
+    final Color shadowCol =
+        widget.shadowColor ??
         HSLColor.fromColor(faceColor)
             .withLightness(
-            (HSLColor.fromColor(faceColor).lightness * 0.4).clamp(0.0, 1.0))
+              (HSLColor.fromColor(faceColor).lightness * 0.4).clamp(0.0, 1.0),
+            )
             .toColor();
 
     return GestureDetector(
@@ -273,20 +268,17 @@ class _NeoPopButtonState extends State<NeoPopButton>
         builder: (context, _) {
           final double pressedDepth = depth * (1 - _pressAnimation.value);
           final double translateY = depth * _pressAnimation.value;
-          final double dropShadowOpacity = (1 - _pressAnimation.value).clamp(0.0, 1.0);
+          final double dropShadowOpacity = (1 - _pressAnimation.value).clamp(
+            0.0,
+            1.0,
+          );
 
           return SizedBox(
             width: widget.fullWidth ? double.infinity : null,
             child: Padding(
-              padding: EdgeInsets.only(
-                bottom: depth,
-                right: depth * 0.6,
-              ),
+              padding: EdgeInsets.only(bottom: depth, right: depth * 0.6),
               child: Transform.translate(
-                offset: Offset(
-                  _pressAnimation.value * depth * 0.3,
-                  translateY,
-                ),
+                offset: Offset(_pressAnimation.value * depth * 0.3, translateY),
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
@@ -296,11 +288,13 @@ class _NeoPopButtonState extends State<NeoPopButton>
                         offset: Offset(0, depth * 1.5),
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(widget.borderRadius),
+                            borderRadius: BorderRadius.circular(
+                              widget.borderRadius,
+                            ),
                             boxShadow: [
                               BoxShadow(
                                 color: (widget.glowColor ?? shadowCol)
-                                    .withValues(alpha: 0.4 * dropShadowOpacity),
+                                    .withValues(alpha: 0.3 * dropShadowOpacity),
                                 blurRadius: 16,
                                 spreadRadius: -2,
                                 offset: const Offset(0, 8),
@@ -311,7 +305,7 @@ class _NeoPopButtonState extends State<NeoPopButton>
                       ),
                     ),
 
-                    // Bottom 3D edge with realistic ambient occlusion gradient
+                    // Bottom 3D edge
                     if (pressedDepth > 0.1)
                       Positioned(
                         bottom: -pressedDepth,
@@ -350,7 +344,11 @@ class _NeoPopButtonState extends State<NeoPopButton>
                               end: Alignment.centerRight,
                               colors: [
                                 shadowCol.withValues(alpha: 0.9),
-                                Color.lerp(shadowCol, Colors.black, 0.15)!.withValues(alpha: 0.9),
+                                Color.lerp(
+                                  shadowCol,
+                                  Colors.black,
+                                  0.15,
+                                )!.withValues(alpha: 0.9),
                               ],
                             ),
                             borderRadius: BorderRadius.only(
@@ -363,41 +361,42 @@ class _NeoPopButtonState extends State<NeoPopButton>
 
                     // Front Face
                     Container(
-                      padding: widget.padding ??
+                      padding:
+                          widget.padding ??
                           const EdgeInsets.symmetric(
-                              vertical: 18, horizontal: 24),
+                            vertical: 18,
+                            horizontal: 24,
+                          ),
                       decoration: BoxDecoration(
                         color: widget.gradient == null ? faceColor : null,
                         gradient: widget.gradient,
-                        borderRadius:
-                        BorderRadius.circular(widget.borderRadius),
-                        // Inner bevel highlight for premium molded feel
+                        borderRadius: BorderRadius.circular(
+                          widget.borderRadius,
+                        ),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: faceColor == Colors.transparent ? 0.0 : 0.15),
+                          color: Colors.white.withValues(
+                            alpha: faceColor == Colors.transparent ? 0.0 : 0.1,
+                          ),
                           width: 1.0,
                         ),
                       ),
-                      child: Stack(
-                        children: [
-                          // Content Layer
-                          Center(
-                            child: AnimatedOpacity(
-                              duration: const Duration(milliseconds: 150),
-                              opacity: _canPress ? 1.0 : 0.5,
-                              child: widget.isLoading
-                                  ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2.5,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                      Colors.white),
-                                ),
-                              )
-                                  : widget.child,
-                            ),
-                          ),
-                        ],
+                      child: Center(
+                        child: AnimatedOpacity(
+                          duration: const Duration(milliseconds: 150),
+                          opacity: _canPress ? 1.0 : 0.5,
+                          child: widget.isLoading
+                              ? const SizedBox(
+                                  width: 22,
+                                  height: 22,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : widget.child,
+                        ),
                       ),
                     ),
                   ],
@@ -411,7 +410,6 @@ class _NeoPopButtonState extends State<NeoPopButton>
   }
 }
 
-/// Upgraded Text style with a subtle text shadow for better contrast
 class NeoPopButtonText extends StatelessWidget {
   final String text;
   final Color color;
@@ -422,50 +420,37 @@ class NeoPopButtonText extends StatelessWidget {
   final bool iconAfter;
 
   const NeoPopButtonText(
-      this.text, {
-        super.key,
-        this.color = const Color(0xFFFFFFFF), // Default to white for premium contrast
-        this.fontSize = 16, // Slightly reduced for elegance
-        this.fontWeight = FontWeight.w700, // Reduced from w800 to look less heavy
-        this.letterSpacing = 0.8, // Increased tracking for a modern feel
-        this.icon,
-        this.iconAfter = true,
-      });
+    this.text, {
+    super.key,
+    this.color = AppColors.darkText,
+    this.fontSize = 16,
+    this.fontWeight = FontWeight.w700,
+    this.letterSpacing = 1.0,
+    this.icon,
+    this.iconAfter = true,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final textWidget = Text(
-      text.toUpperCase(), // Uppercase often enhances the NeoPop brutalist/premium aesthetic
-      style: TextStyle(
-        color: color,
-        fontSize: fontSize,
-        fontWeight: fontWeight,
-        letterSpacing: letterSpacing,
-        // Subtle drop shadow behind text to separate it from gradients
-        shadows: [
-          Shadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            offset: const Offset(0, 1.5),
-            blurRadius: 2,
-          ),
-        ],
-      ),
-    );
-
-    if (icon == null) return textWidget;
-
-    final iconWidget = Icon(
-      icon,
+    final textStyle = Theme.of(context).textTheme.labelLarge?.copyWith(
       color: color,
-      size: fontSize + 4,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      letterSpacing: letterSpacing,
       shadows: [
         Shadow(
-          color: Colors.black.withValues(alpha: 0.15),
-          offset: const Offset(0, 1.5),
-          blurRadius: 2,
+          color: Colors.black.withValues(alpha: 0.1),
+          offset: const Offset(0, 1),
+          blurRadius: 1,
         ),
       ],
     );
+
+    final textWidget = Text(text.toUpperCase(), style: textStyle);
+
+    if (icon == null) return textWidget;
+
+    final iconWidget = Icon(icon, color: color, size: fontSize + 4);
 
     return Row(
       mainAxisSize: MainAxisSize.min,

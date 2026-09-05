@@ -5,6 +5,7 @@ import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
 
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
@@ -42,7 +43,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
     String formatted = '';
     if (clean.length > 4) {
-      formatted = '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, _mathMin(clean.length, 8))}';
+      formatted =
+          '${clean.substring(0, 2)} / ${clean.substring(2, 4)} / ${clean.substring(4, _mathMin(clean.length, 8))}';
     } else if (clean.length > 2) {
       formatted = '${clean.substring(0, 2)} / ${clean.substring(2)}';
     } else {
@@ -109,7 +111,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (name.isNotEmpty) {
         try {
           final clean = name.trim().replaceAll(RegExp(r'[^\w]'), '');
-          initials = clean.isNotEmpty ? clean[0] : String.fromCharCode(name.runes.first);
+          initials = clean.isNotEmpty
+              ? clean[0]
+              : String.fromCharCode(name.runes.first);
         } catch (_) {
           initials = 'U';
         }
@@ -124,9 +128,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         avatarColorIndex: currentProfile?.avatarColorIndex ?? 0,
         initials: initials.toUpperCase(),
       );
-      
+
       await authState.saveProfile(updatedProfile);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -153,7 +157,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isFormValid = _nameController.text.isNotEmpty && _emailController.text.isNotEmpty;
+    final isFormValid =
+        _nameController.text.isNotEmpty && _emailController.text.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -161,61 +166,77 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: AppColors.background,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Edit Profile',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
         ),
         centerTitle: true,
       ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 12),
-                _buildField(
-                  label: 'Full Name',
-                  placeholder: 'Enter full name',
-                  controller: _nameController,
-                ),
-                _buildField(
-                  label: 'Email Address',
-                  placeholder: 'Enter email address',
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                _buildField(
-                  label: 'Date of Birth',
-                  placeholder: 'DD / MM / YYYY',
-                  controller: _dobController,
-                  keyboardType: TextInputType.datetime,
-                ),
-                if (_errorMsg.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
-                    child: Text(
-                      _errorMsg,
-                      style: const TextStyle(color: Color(0xFFFF4757), fontSize: 13),
+      body: GrittyBackground(
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24.0),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 12),
+                  _buildField(
+                    label: 'Full Name',
+                    placeholder: 'Enter full name',
+                    controller: _nameController,
+                  ),
+                  _buildField(
+                    label: 'Email Address',
+                    placeholder: 'Enter email address',
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  _buildField(
+                    label: 'Date of Birth',
+                    placeholder: 'DD / MM / YYYY',
+                    controller: _dobController,
+                    keyboardType: TextInputType.datetime,
+                  ),
+                  if (_errorMsg.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Text(
+                        _errorMsg,
+                        style: const TextStyle(
+                          color: AppColors.destructive,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 24),
+                  NeoPopButton.primary(
+                    onPressed: isFormValid && !_loading ? _handleSave : null,
+                    isLoading: _loading,
+                    enabled: isFormValid && !_loading,
+                    depth: 6.0,
+                    child: NeoPopButtonText(
+                      'Save Changes',
+                      color: isFormValid && !_loading
+                          ? AppColors.darkText
+                          : Colors.black,
+                      icon: Icons.check_circle_rounded,
                     ),
                   ),
-                const SizedBox(height: 24),
-                NeoPopButton.primary(
-                  onPressed: isFormValid && !_loading ? _handleSave : null,
-                  isLoading: _loading,
-                  enabled: isFormValid && !_loading,
-                  depth: 6.0,
-                  child: const NeoPopButtonText(
-                    'Save Changes',
-                    icon: Icons.check_circle_rounded,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

@@ -34,7 +34,7 @@ class Hack {
   final String circledetail;
   final String image;
   final List<String> thingsToNote;
-  
+
   // Legacy / UI Helpers
   int likes;
   bool liked;
@@ -68,20 +68,22 @@ class Hack {
 
   String get title => name.isNotEmpty ? name : heading;
   String get description => heading.isNotEmpty ? heading : name;
-  String get cardName => cards.isNotEmpty ? cards.join(', ') : 'All Credit Cards';
+  String get cardName =>
+      cards.isNotEmpty ? cards.join(', ') : 'All Credit Cards';
 
   factory Hack.fromJson(Map<String, dynamic> json) {
-    final stepsList = (json['steps'] as List<dynamic>?)
+    final stepsList =
+        (json['steps'] as List<dynamic>?)
             ?.map((e) => HackStep.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
 
-    final cardsList = (json['cards'] as List<dynamic>?)
-            ?.map((e) => e.toString())
-            .toList() ??
+    final cardsList =
+        (json['cards'] as List<dynamic>?)?.map((e) => e.toString()).toList() ??
         [];
 
-    final notesList = (json['things_to_note'] as List<dynamic>?)
+    final notesList =
+        (json['things_to_note'] as List<dynamic>?)
             ?.map((e) => e.toString())
             .toList() ??
         [];

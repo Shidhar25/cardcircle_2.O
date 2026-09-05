@@ -1,5 +1,4 @@
 import 'credit_card.dart';
-import 'badge.dart';
 
 class User {
   final String name;
@@ -9,10 +8,8 @@ class User {
   final int levelIndex;
   int points;
   final int pointsToNextLevel;
-  final int savings;
   final int streak;
   final List<CreditCard> cards;
-  final List<Badge> badges;
   final int friendsCount;
   final int hacksShared;
   final int followersCount;
@@ -26,10 +23,8 @@ class User {
     required this.levelIndex,
     required this.points,
     required this.pointsToNextLevel,
-    required this.savings,
     required this.streak,
     required this.cards,
-    required this.badges,
     required this.friendsCount,
     required this.hacksShared,
     required this.followersCount,
@@ -44,10 +39,8 @@ class User {
     int? levelIndex,
     int? points,
     int? pointsToNextLevel,
-    int? savings,
     int? streak,
     List<CreditCard>? cards,
-    List<Badge>? badges,
     int? friendsCount,
     int? hacksShared,
     int? followersCount,
@@ -61,10 +54,8 @@ class User {
       levelIndex: levelIndex ?? this.levelIndex,
       points: points ?? this.points,
       pointsToNextLevel: pointsToNextLevel ?? this.pointsToNextLevel,
-      savings: savings ?? this.savings,
       streak: streak ?? this.streak,
       cards: cards ?? this.cards,
-      badges: badges ?? this.badges,
       friendsCount: friendsCount ?? this.friendsCount,
       hacksShared: hacksShared ?? this.hacksShared,
       followersCount: followersCount ?? this.followersCount,

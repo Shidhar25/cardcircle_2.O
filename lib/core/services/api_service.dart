@@ -1,10 +1,18 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import '../../shared/models/otp_send_result.dart';
+import 'api_result.dart';
+import '../../shared/models/paged_result.dart';
 import 'local_storage_service.dart';
 import 'logger_service.dart';
 
 class ApiService {
+  // One backend for everything — auth/user endpoints and the bank/card
+  // catalog share a host, so card ids selected in Add Cards still resolve
+  // when Your Cards fetches them back. Point both at a LAN IP (not
+  // `localhost`) to test against a local server from a physical device.
   static const String baseUrl = 'http://13.205.204.182:8080/api/v1';
+  static const String cardsCatalogBaseUrl = baseUrl;
 
   static String? _accessToken;
   static String? _refreshToken;
@@ -46,7 +54,9 @@ class ApiService {
           return body['data'];
         }
       }
-      LoggerService.warning('Failed to load bootstrap config: Status ${response.statusCode}');
+      LoggerService.warning(
+        'Failed to load bootstrap config: Status ${response.statusCode}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error fetching bootstrap config', e, stack);
     }
@@ -54,82 +64,127 @@ class ApiService {
   }
 
   // 2. Send OTP
-  static Future<Map<String, dynamic>?> sendOtp(String phoneNumber, String purpose) async {
+  ///
+  /// Returns a result rather than a nullable map because a refusal is not
+  /// necessarily a dead end: when a code was sent moments ago the backend
+  /// replies `success: false` but hands back the same `requestId`, which is
+  /// still verifiable. See [OtpSendResult].
+  static Future<OtpSendResult> sendOtp(
+    String phoneNumber,
+    String purpose,
+  ) async {
     try {
       LoggerService.info('Sending OTP to $phoneNumber for $purpose...');
       final response = await http.post(
         Uri.parse('$baseUrl/otp/send'),
         headers: _headers(),
-        body: jsonEncode({
-          'phoneNumber': phoneNumber,
-          'purpose': purpose,
-        }),
+        body: jsonEncode({'phoneNumber': phoneNumber, 'purpose': purpose}),
       );
       final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        LoggerService.info('OTP request sent successfully.');
-        return body['data']; // requestId, expiresIn, etc.
+      if (body is! Map<String, dynamic>) {
+        return const OtpSendResult.failed('Unexpected response from server.');
       }
-      LoggerService.warning('OTP send failed: ${body['message'] ?? response.body}');
+      final result = OtpSendResult.fromResponse(
+        body,
+        httpOk: response.statusCode == 200,
+      );
+      if (result.sentNow) {
+        LoggerService.info('OTP request sent successfully.');
+      } else {
+        LoggerService.warning('OTP send declined: ${result.message}');
+      }
+      return result;
     } catch (e, stack) {
       LoggerService.error('Error sending OTP', e, stack);
+      return const OtpSendResult.failed(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return null;
   }
 
   // 3. Verify OTP
-  static Future<Map<String, dynamic>?> verifyOtp(String requestId, String otp) async {
+  ///
+  /// A wrong code is not a flat failure: the backend replies with
+  /// `data.remainingAttempts`, and with `data.code = "MAX_ATTEMPTS"` once
+  /// they run out. Returning a nullable map threw that away and left the
+  /// screen saying "Invalid OTP code" right up until the request was locked,
+  /// with no warning that it was about to be. The result carries it through.
+  static Future<ApiResult<Map<String, dynamic>>> verifyOtp(
+    String requestId,
+    String otp,
+  ) async {
     try {
       LoggerService.info('Verifying OTP for request $requestId...');
       final response = await http.post(
         Uri.parse('$baseUrl/otp/verify'),
         headers: _headers(),
-        body: jsonEncode({
-          'requestId': requestId,
-          'otp': otp,
-        }),
+        body: jsonEncode({'requestId': requestId, 'otp': otp}),
       );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
+      final result = ApiResult.fromResponse(response, action: 'Verify OTP');
+      if (result.ok) {
         LoggerService.info('OTP verified successfully.');
-        final data = body['data'];
-        final tokens = data['tokens'];
-        if (tokens != null) {
-          _accessToken = tokens['accessToken'];
-          _refreshToken = tokens['refreshToken'];
-          await LocalStorageService.setString('@auth/accessToken', _accessToken!);
-          await LocalStorageService.setString('@auth/refreshToken', _refreshToken!);
-        }
-        return data; // isNewUser, tokens, etc.
+        await _storeTokens(result.data?['tokens']);
       }
-      LoggerService.warning('OTP verification failed: ${body['message'] ?? response.body}');
+      return result;
     } catch (e, stack) {
       LoggerService.error('Error verifying OTP', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return null;
+  }
+
+  /// Persists an auth token pair, if the payload carries one.
+  ///
+  /// Both OTP verify (returning user) and create-profile (new user) hand
+  /// back the same `{accessToken, refreshToken}` shape, so the storage runs
+  /// in one place rather than being written out twice.
+  static Future<void> _storeTokens(dynamic tokens) async {
+    if (tokens is! Map) return;
+    final access = tokens['accessToken'];
+    final refresh = tokens['refreshToken'];
+    if (access is! String || access.isEmpty) return;
+
+    _accessToken = access;
+    await LocalStorageService.setString('@auth/accessToken', access);
+    if (refresh is String && refresh.isNotEmpty) {
+      _refreshToken = refresh;
+      await LocalStorageService.setString('@auth/refreshToken', refresh);
+    }
   }
 
   // 4. Resend OTP
-  static Future<Map<String, dynamic>?> resendOtp(String requestId) async {
+  ///
+  /// Same contract as [sendOtp]: a throttled resend still carries a usable
+  /// `requestId` and a `retryAfter` the screen can count down from.
+  static Future<OtpSendResult> resendOtp(String requestId) async {
     try {
       LoggerService.info('Resending OTP for request $requestId...');
       final response = await http.post(
         Uri.parse('$baseUrl/otp/resend'),
         headers: _headers(),
-        body: jsonEncode({
-          'requestId': requestId,
-        }),
+        body: jsonEncode({'requestId': requestId}),
       );
       final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        LoggerService.info('OTP resent successfully.');
-        return body['data'];
+      if (body is! Map<String, dynamic>) {
+        return const OtpSendResult.failed('Unexpected response from server.');
       }
-      LoggerService.warning('OTP resend failed: ${body['message'] ?? response.body}');
+      final result = OtpSendResult.fromResponse(
+        body,
+        httpOk: response.statusCode == 200,
+      );
+      if (result.sentNow) {
+        LoggerService.info('OTP resent successfully.');
+      } else {
+        LoggerService.warning('OTP resend declined: ${result.message}');
+      }
+      return result;
     } catch (e, stack) {
       LoggerService.error('Error resending OTP', e, stack);
+      return const OtpSendResult.failed(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return null;
   }
 
   // 5. Refresh token
@@ -140,9 +195,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/refresh-token'),
         headers: _headers(),
-        body: jsonEncode({
-          'refreshToken': _refreshToken,
-        }),
+        body: jsonEncode({'refreshToken': _refreshToken}),
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
@@ -152,7 +205,9 @@ class ApiService {
         LoggerService.info('Access token refreshed successfully.');
         return true;
       }
-      LoggerService.warning('Refresh token failed: ${body['message'] ?? response.body}');
+      LoggerService.warning(
+        'Refresh token failed: ${body['message'] ?? response.body}',
+      );
       // Clear invalid tokens
       await logout();
     } catch (e, stack) {
@@ -168,9 +223,7 @@ class ApiService {
       final response = await http.post(
         Uri.parse('$baseUrl/auth/verify-token'),
         headers: _headers(),
-        body: jsonEncode({
-          'accessToken': token,
-        }),
+        body: jsonEncode({'accessToken': token}),
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
@@ -202,7 +255,13 @@ class ApiService {
   }
 
   // 8. Create user profile
-  static Future<Map<String, dynamic>?> createProfile({
+  /// Creates the profile and signs the new user in.
+  ///
+  /// Returns the full result so the form can show the backend's specific
+  /// complaint — `USERNAME_EXISTS`, `PHONE_EXISTS`, `EMAIL_EXISTS` — instead
+  /// of a blanket "Failed to create profile" that gives the user nothing to
+  /// act on. The created user is at `data.user`.
+  static Future<ApiResult<Map<String, dynamic>>> createProfile({
     required String username,
     required String name,
     required String email,
@@ -222,23 +281,15 @@ class ApiService {
           'dateOfBirth': dateOfBirth,
         }),
       );
-      final body = jsonDecode(response.body);
-      if ((response.statusCode == 201 || response.statusCode == 200) && body['success'] == true) {
-        final data = body['data'];
-        final tokens = data['tokens'];
-        if (tokens != null) {
-          _accessToken = tokens['accessToken'];
-          _refreshToken = tokens['refreshToken'];
-          await LocalStorageService.setString('@auth/accessToken', _accessToken!);
-          await LocalStorageService.setString('@auth/refreshToken', _refreshToken!);
-        }
-        return data['user'];
-      }
-      LoggerService.warning('Profile creation failed: ${body['message'] ?? response.body}');
+      final result = ApiResult.fromResponse(response, action: 'Create profile');
+      if (result.ok) await _storeTokens(result.data?['tokens']);
+      return result;
     } catch (e, stack) {
       LoggerService.error('Error creating profile', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return null;
   }
 
   // 9. Get current user profile
@@ -253,7 +304,9 @@ class ApiService {
       if (response.statusCode == 200 && body['success'] == true) {
         return body['data'];
       }
-      LoggerService.warning('Get user profile failed: ${body['message'] ?? response.body}');
+      LoggerService.warning(
+        'Get user profile failed: ${body['message'] ?? response.body}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error getting user profile', e, stack);
     }
@@ -283,7 +336,9 @@ class ApiService {
       if (response.statusCode == 200 && body['success'] == true) {
         return body['data'];
       }
-      LoggerService.warning('Update user profile failed: ${body['message'] ?? response.body}');
+      LoggerService.warning(
+        'Update user profile failed: ${body['message'] ?? response.body}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error updating user profile', e, stack);
     }
@@ -291,100 +346,278 @@ class ApiService {
   }
 
   // 11. Get all categories
-  static Future<List<Map<String, dynamic>>?> getCategories() async {
+  static Future<List<Map<String, dynamic>>?> getCategories() =>
+      _fetchCategories('$baseUrl/category/list', auth: false);
+
+  /// The categories this user has tagged (`GET /category/user`).
+  ///
+  /// Same envelope as the full list, plus `isFavorite` and `taggedAt` per
+  /// row, so it reads through the same parser.
+  static Future<List<Map<String, dynamic>>?> getUserCategories() =>
+      _fetchCategories('$baseUrl/category/user', auth: true);
+
+  static Future<List<Map<String, dynamic>>?> _fetchCategories(
+    String url, {
+    required bool auth,
+  }) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/category/list'),
-        headers: _headers(),
+        Uri.parse(url),
+        headers: _headers(requireAuth: auth),
       );
       final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['data']['categories'];
-        return list.map((item) => item as Map<String, dynamic>).toList();
+      if (response.statusCode == 200 &&
+          body is Map<String, dynamic> &&
+          body['success'] == true) {
+        // Indexing `body['data']['categories']` directly threw whenever the
+        // response was shaped even slightly differently — a 200 with no
+        // data, or a bare list — and took the screen down with it.
+        final data = body['data'];
+        final list = data is Map ? data['categories'] : data;
+        if (list is! List) {
+          LoggerService.warning('Categories response had no list: $url');
+          return null;
+        }
+        return list.whereType<Map<String, dynamic>>().toList();
       }
+      LoggerService.warning(
+        'Fetch categories failed: ${response.statusCode} - ${response.body}',
+      );
     } catch (e, stack) {
-      LoggerService.error('Error fetching categories', e, stack);
+      LoggerService.error('Error fetching categories from $url', e, stack);
     }
     return null;
   }
 
   // 12. Tag categories to user profile
-  static Future<bool> tagCategories(List<String> categoryIds) async {
+  static Future<ApiResult<Map<String, dynamic>>> tagCategories(
+    List<String> categoryIds,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/category/tag'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'categoryIds': categoryIds}),
       );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        return true;
-      }
+      return ApiResult.fromResponse(response, action: 'Tag categories');
     } catch (e, stack) {
       LoggerService.error('Error tagging categories', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
-  // 13. Get all banks
-  static Future<List<String>?> getBanks() async {
+  static const String _assetBase =
+      'https://cardcirclepublicassets.s3.ap-south-1.amazonaws.com';
+
+  /// Genuine bank logos live under this prefix. Anything else — notably
+  /// `/credit-card-images/` and `/generic/bank-generic-cards/` — is card
+  /// artwork, not a logo.
+  static const String _bankLogoPrefix = '/generic/bank-logos/';
+
+  /// bank id -> logo URL. Null means "no genuine logo for this bank".
+  static Map<String, String?>? _bankLogoCache;
+
+  /// Guards against the `/banks` endpoint returning **card artwork** in its
+  /// `logo` field, which it currently does for most banks:
+  ///
+  ///     axis-bank → /credit-card-images/axis/axis-neo.webp
+  ///     hdfc-bank → /credit-card-images/hdfc/marriott-bonvoy-hdfc.webp
+  ///
+  /// Rendering those puts a picture of a credit card where the bank's mark
+  /// should be. Anything outside the bank-logo path is therefore rejected and
+  /// the conventional logo URL is used instead — that resolves for the banks
+  /// which do have a mark, and 404s harmlessly for the ones that don't, since
+  /// `LogoBadge` hides itself when the image fails.
+  ///
+  /// Once `/banks` returns real logo URLs (or null) this can collapse back to
+  /// simply trusting the field.
+  static String? sanitizedBankLogo(String? bankId, String? raw) {
+    if (raw != null && raw.contains(_bankLogoPrefix)) return raw;
+    if (bankId == null || bankId.isEmpty) return null;
+    return '$_assetBase$_bankLogoPrefix$bankId.webp';
+  }
+
+  // 13. Get all banks (catalog)
+  static Future<List<Map<String, dynamic>>?> getBanks() async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/banks'),
+        Uri.parse('$cardsCatalogBaseUrl/banks'),
         headers: _headers(),
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['data'];
-        return list.map((item) => item as String).toList();
+        final List<dynamic> list = body['data'] ?? [];
+        final banks = list.map(_normalizeBank).nonNulls.toList();
+        _bankLogoCache = {
+          for (final b in banks)
+            (b['id'] ?? '') as String: sanitizedBankLogo(
+              b['id'] as String?,
+              b['logo'] as String?,
+            ),
+        };
+        return banks;
       }
+      LoggerService.warning(
+        'Fetch banks failed: ${response.statusCode} - ${response.body}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error fetching banks', e, stack);
     }
     return null;
   }
 
-  // 14. Get cards by bank name
-  static Future<List<Map<String, dynamic>>?> getCardsByBank(String bankName) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/user/cards/browse?banks=${Uri.encodeComponent(bankName)}&limit=200'),
-        headers: _headers(requireAuth: true),
-      );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final rawData = body['data'];
-        List<dynamic> list;
-        if (rawData is Map && rawData.containsKey('cards')) {
-          list = rawData['cards'];
-        } else if (rawData is List) {
-          list = rawData;
-        } else {
-          list = [];
-        }
-        return list.map((item) => item as Map<String, dynamic>).toList();
-      }
-    } catch (e, stack) {
-      LoggerService.error('Error fetching cards for $bankName', e, stack);
+  /// Normalises one `/banks` row.
+  ///
+  /// This endpoint has shipped two contracts: the older deployment returns
+  /// a plain array of bank names, the newer microservice returns objects
+  /// with `id`/`name`/`logo`. Casting every row to a Map threw on the older
+  /// shape and left Add Cards with no banks at all, so both are accepted
+  /// and a bare name is given a slug id derived from it.
+  static Map<String, dynamic>? _normalizeBank(dynamic item) {
+    if (item is Map<String, dynamic>) {
+      final name = (item['name'] as String?)?.trim();
+      if (name == null || name.isEmpty) return null;
+      final id = (item['id'] as String?)?.trim();
+      return {
+        'id': (id == null || id.isEmpty) ? slugifyBankName(name) : id,
+        'name': name,
+        'logo': item['logo'],
+        'card_count': item['card_count'],
+      };
+    }
+    if (item is String && item.trim().isNotEmpty) {
+      final name = item.trim();
+      return {'id': slugifyBankName(name), 'name': name, 'logo': null};
     }
     return null;
   }
 
+  /// Derives the id the object contract would have used for a bank name,
+  /// so the two shapes produce interchangeable ids.
+  static String slugifyBankName(String name) => name
+      .toLowerCase()
+      .replaceAll(RegExp(r"[^a-z0-9]+"), '-')
+      .replaceAll(RegExp(r'^-+|-+$'), '');
+
+  /// Bank logo for a bank id, sanitized so card artwork can never leak in.
+  static Future<String?> bankLogoFor(String bankId) async {
+    if (bankId.isEmpty) return null;
+    if (_bankLogoCache == null) await getBanks();
+    return _bankLogoCache?[bankId] ?? sanitizedBankLogo(bankId, null);
+  }
+
+  // 14. Browse a bank's cards that the user has NOT already added.
+  //
+  // Uses the authenticated `/user/cards/browse` endpoint rather than the
+  // public catalog: because it knows who the caller is, it excludes cards
+  // already in their wallet, so Add Cards never offers a duplicate.
+  static Future<List<Map<String, dynamic>>?> getCardsByBank(
+    String bankName,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '$baseUrl/user/cards/browse?banks=${Uri.encodeComponent(bankName)}&limit=200',
+        ),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        final List<dynamic> list = raw is Map
+            ? (raw['cards'] ?? raw['items'] ?? const [])
+            : (raw is List ? raw : const []);
+        return list
+            .map((item) => _normalizeCatalogCard(item as Map<String, dynamic>))
+            .toList();
+      }
+      LoggerService.warning(
+        'Browse cards failed: ${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error browsing cards for $bankName', e, stack);
+    }
+    return null;
+  }
+
+  /// Maps a browse/catalog row onto the single shape the Add Cards screen
+  /// reads, so the UI doesn't have to care whether the backend returned the
+  /// nested catalog layout (`card.name`, `image.url`) or the flat saved-card
+  /// layout (`card_name`, `image_url`).
+  static Map<String, dynamic> _normalizeCatalogCard(Map<String, dynamic> item) {
+    final nested = (item['card'] as Map?)?.cast<String, dynamic>();
+
+    String? pick(String flatKey, String nestedKey) {
+      final v = item[flatKey] ?? nested?[nestedKey];
+      return (v is String && v.isNotEmpty) ? v : null;
+    }
+
+    String? urlOf(dynamic value, String flatKey) {
+      if (value is Map) {
+        final u = value['url'];
+        if (u is String && u.isNotEmpty) return u;
+      }
+      final flat = item[flatKey];
+      return (flat is String && flat.isNotEmpty) ? flat : null;
+    }
+
+    final imageObj = item['image'];
+    final imageUrl = urlOf(imageObj, 'image_url');
+    final bool isSpecific = imageObj is Map
+        ? imageObj['is_card_specific'] == true
+        : (imageUrl != null && !imageUrl.contains('bank-generic-cards'));
+
+    return {
+      'id': item['id'] ?? item['card_id'] ?? '',
+      'bank_id': item['bank_id'] ?? item['bank_name'] ?? '',
+      'card': {
+        'name': pick('card_name', 'name') ?? '',
+        'issuer': pick('issuer', 'issuer') ?? '',
+        'network': pick('network', 'network') ?? '',
+        'card_type': pick('card_type', 'card_type') ?? '',
+        'variant': pick('variant', 'variant') ?? '',
+      },
+      if (imageUrl != null)
+        'image': {'url': imageUrl, 'is_card_specific': isSpecific},
+      // Sanitized for the same reason as `/banks` — this field can also carry
+      // card artwork rather than the bank's mark.
+      if (sanitizedBankLogo(
+            item['bank_id'] as String?,
+            urlOf(item['bank_logo'], 'bank_logo_url'),
+          ) !=
+          null)
+        'bank_logo': {
+          'url': sanitizedBankLogo(
+            item['bank_id'] as String?,
+            urlOf(item['bank_logo'], 'bank_logo_url'),
+          ),
+        },
+      if (urlOf(item['network_logo'], 'network_logo_url') != null)
+        'network_logo': {
+          'url': urlOf(item['network_logo'], 'network_logo_url'),
+        },
+    };
+  }
+
   // 15. Add user cards
-  static Future<bool> addUserCards(List<Map<String, dynamic>> cards) async {
+  static Future<ApiResult<Map<String, dynamic>>> addUserCards(
+    List<Map<String, dynamic>> cards,
+  ) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl/user/cards'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'cards': cards}),
       );
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        return true;
-      }
+      return ApiResult.fromResponse(response, action: 'Add cards');
     } catch (e, stack) {
       LoggerService.error('Error saving user cards', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
   // 16. Get user saved cards
@@ -425,7 +658,9 @@ class ApiService {
   }
 
   // 18. Sync contacts
-  static Future<Map<String, dynamic>?> syncContacts(Map<String, dynamic> payload) async {
+  static Future<Map<String, dynamic>?> syncContacts(
+    Map<String, dynamic> payload,
+  ) async {
     try {
       LoggerService.info('Syncing contacts...');
       final response = await http.post(
@@ -463,7 +698,9 @@ class ApiService {
   }
 
   // 20. Delete user cards
-  static Future<bool> deleteUserCards(List<String> userCardIds) async {
+  static Future<ApiResult<Map<String, dynamic>>> deleteUserCards(
+    List<String> userCardIds,
+  ) async {
     try {
       LoggerService.info('Deleting user cards: $userCardIds');
       final response = await http.delete(
@@ -471,55 +708,59 @@ class ApiService {
         headers: _headers(requireAuth: true),
         body: jsonEncode({'userCardIds': userCardIds}),
       );
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        return true;
-      }
+      return ApiResult.fromResponse(response, action: 'Delete cards');
     } catch (e, stack) {
       LoggerService.error('Error deleting user cards', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
   // 21. Follow user
-  static Future<bool> followUser(String recipientId) async {
+  /// Sends a follow *request*.
+  ///
+  /// The endpoint creates a pending request rather than an immediate follow,
+  /// so the resulting relationship is normally `request_sent`. The response
+  /// `data` may carry a `status`, which the caller should prefer over that
+  /// assumption — an account that auto-approves goes straight to
+  /// `following`.
+  static Future<ApiResult<Map<String, dynamic>>> followUser(
+    String recipientId,
+  ) async {
     try {
       LoggerService.info('Following user $recipientId...');
       final response = await http.post(
         Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
         headers: _headers(requireAuth: true),
-        body: jsonEncode({
-          "message": "Hi, I would like to follow you"
-        }),
+        body: jsonEncode({"message": "Hi, I would like to follow you"}),
       );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        return body['success'] == true;
-      }
-      LoggerService.warning('Follow user failed: ${response.statusCode} - ${response.body}');
+      return ApiResult.fromResponse(response, action: 'Follow user');
     } catch (e, stack) {
       LoggerService.error('Error following user', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
   // 22. Unfollow user
-  static Future<bool> unfollowUser(String recipientId) async {
+  static Future<ApiResult<Map<String, dynamic>>> unfollowUser(
+    String recipientId,
+  ) async {
     try {
       LoggerService.info('Unfollowing user $recipientId...');
       final response = await http.delete(
         Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
         headers: _headers(requireAuth: true),
       );
-      if (response.statusCode == 200 || response.statusCode == 204) {
-        if (response.body.isEmpty) return true;
-        final body = jsonDecode(response.body);
-        return body['success'] == true;
-      }
-      LoggerService.warning('Unfollow user failed: ${response.statusCode} - ${response.body}');
+      return ApiResult.fromResponse(response, action: 'Unfollow user');
     } catch (e, stack) {
       LoggerService.error('Error unfollowing user', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
   // 23. Get incoming follow requests
@@ -561,29 +802,30 @@ class ApiService {
   }
 
   // 25. Approve follow request
-  static Future<bool> approveFollowRequest(String followId, List<String> allowedCardIds) async {
+  static Future<ApiResult<Map<String, dynamic>>> approveFollowRequest(
+    String followId,
+    List<String> allowedCardIds,
+  ) async {
     try {
       LoggerService.info('Approving follow request $followId...');
       final response = await http.post(
         Uri.parse('$baseUrl/follow/requests/$followId/approve'),
         headers: _headers(requireAuth: true),
-        body: jsonEncode({
-          "allowed_card_ids": allowedCardIds
-        }),
+        body: jsonEncode({"allowed_card_ids": allowedCardIds}),
       );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        return body['success'] == true;
-      }
-      LoggerService.warning('Approve follow request failed: ${response.statusCode} - ${response.body}');
+      return ApiResult.fromResponse(response, action: 'Approve request');
     } catch (e, stack) {
       LoggerService.error('Error approving follow request', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
   }
 
   // 26. Reject follow request
-  static Future<bool> rejectFollowRequest(String followId) async {
+  static Future<ApiResult<Map<String, dynamic>>> rejectFollowRequest(
+    String followId,
+  ) async {
     try {
       LoggerService.info('Rejecting follow request $followId...');
       final response = await http.post(
@@ -591,15 +833,91 @@ class ApiService {
         headers: _headers(requireAuth: true),
         body: jsonEncode({}),
       );
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = jsonDecode(response.body);
-        return body['success'] == true;
-      }
-      LoggerService.warning('Reject follow request failed: ${response.statusCode} - ${response.body}');
+      return ApiResult.fromResponse(response, action: 'Reject request');
     } catch (e, stack) {
       LoggerService.error('Error rejecting follow request', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
     }
-    return false;
+  }
+
+  /// The cards a person you follow has shared with you
+  /// (`GET /follow/following/{followId}/cards`).
+  static Future<List<Map<String, dynamic>>?> getSharedCards(
+    String followId,
+  ) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/following/$followId/cards'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        return raw is List
+            ? raw.whereType<Map<String, dynamic>>().toList()
+            : [];
+      }
+      LoggerService.warning(
+        'Shared cards failed: ${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error fetching shared cards', e, stack);
+    }
+    return null;
+  }
+
+  /// Which of *your* cards a follower may see
+  /// (`GET /follow/permissions/{followId}`).
+  ///
+  /// Returns the allowed card ids; the response nests them under
+  /// `data.permissions` with an `is_allowed` flag per row.
+  static Future<List<String>?> getFollowPermissions(String followId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/follow/permissions/$followId'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final perms = (body['data'] as Map?)?['permissions'];
+        if (perms is! List) return const [];
+        return perms
+            .whereType<Map<String, dynamic>>()
+            .where((p) => p['is_allowed'] == true)
+            .map((p) => p['card_id']?.toString() ?? '')
+            .where((id) => id.isNotEmpty)
+            .toList();
+      }
+      LoggerService.warning(
+        'Get permissions failed: ${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error fetching follow permissions', e, stack);
+    }
+    return null;
+  }
+
+  /// Replaces which cards a follower may see
+  /// (`PUT /follow/permissions/{followId}`).
+  static Future<ApiResult<Map<String, dynamic>>> updateFollowPermissions(
+    String followId,
+    List<String> allowedCardIds,
+  ) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/follow/permissions/$followId'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({'allowed_card_ids': allowedCardIds}),
+      );
+      return ApiResult.fromResponse(response, action: 'Update permissions');
+    } catch (e, stack) {
+      LoggerService.error('Error updating follow permissions', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
   }
 
   // 27. Get followers list
@@ -641,61 +959,52 @@ class ApiService {
   }
 
   // 29. Get My Hacks
-  static Future<List<Map<String, dynamic>>?> getMyHacks() async {
-    try {
-      LoggerService.info('Fetching My Hacks...');
-      final response = await http.get(
-        Uri.parse('$baseUrl/hacks/getmyhacks'),
-        headers: _headers(),
-      );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['hacks'] ?? [];
-        return list.map((item) => item as Map<String, dynamic>).toList();
-      }
-      LoggerService.warning('getMyHacks failed: ${response.statusCode} - ${response.body}');
-    } catch (e, stack) {
-      LoggerService.error('Error fetching My Hacks', e, stack);
-    }
-    return null;
-  }
+  /// One page of the user's benefits.
+  ///
+  /// `page` is 1-based and `limit` defaults to the backend's own page size,
+  /// so the two stay in step without the client restating it.
+  static Future<PagedResult<Map<String, dynamic>>?> getMyHacks({
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage('getmyhacks', page: page, limit: limit);
 
-  // 30. Get Circle Hacks
-  static Future<List<Map<String, dynamic>>?> getCircleHacks() async {
-    try {
-      LoggerService.info('Fetching Circle Hacks...');
-      final response = await http.get(
-        Uri.parse('$baseUrl/hacks/getcirclehacks'),
-        headers: _headers(),
-      );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['hacks'] ?? [];
-        return list.map((item) => item as Map<String, dynamic>).toList();
-      }
-      LoggerService.warning('getCircleHacks failed: ${response.statusCode} - ${response.body}');
-    } catch (e, stack) {
-      LoggerService.error('Error fetching Circle Hacks', e, stack);
-    }
-    return null;
-  }
+  /// One page of benefits shared by people you follow.
+  static Future<PagedResult<Map<String, dynamic>>?> getCircleHacks({
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage('getcirclehacks', page: page, limit: limit);
 
-  // 31. Get FAQ from Hack ID
-  static Future<List<Map<String, dynamic>>?> getFaqFromHackId(String hackId) async {
+  /// The backend's page size. Matches its own default so the first request
+  /// asks for exactly what it would have returned anyway.
+  static const int defaultPageSize = 7;
+
+  static Future<PagedResult<Map<String, dynamic>>?> _fetchHackPage(
+    String path, {
+    required int page,
+    required int limit,
+  }) async {
     try {
-      LoggerService.info('Fetching FAQs for hack $hackId...');
+      LoggerService.info('Fetching $path page $page...');
       final response = await http.get(
-        Uri.parse('$baseUrl/hacks/getfaqfromhackid/$hackId'),
-        headers: _headers(),
+        Uri.parse('$baseUrl/hacks/$path?page=$page&limit=$limit'),
+        headers: _headers(requireAuth: true),
       );
       final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['faqlist'] ?? [];
-        return list.map((item) => item as Map<String, dynamic>).toList();
+      if (response.statusCode == 200 &&
+          body is Map<String, dynamic> &&
+          body['success'] == true) {
+        return PagedResult.fromEnvelope(
+          body,
+          itemsKey: 'hacks',
+          requestedPage: page,
+          requestedLimit: limit,
+        );
       }
-      LoggerService.warning('getFaqFromHackId failed: ${response.statusCode} - ${response.body}');
+      LoggerService.warning(
+        '$path failed: ${response.statusCode} - ${response.body}',
+      );
     } catch (e, stack) {
-      LoggerService.error('Error fetching FAQs for hack $hackId', e, stack);
+      LoggerService.error('Error fetching $path page $page', e, stack);
     }
     return null;
   }
@@ -722,7 +1031,9 @@ class ApiService {
         LoggerService.info('Push token registered successfully.');
         return true;
       }
-      LoggerService.warning('Push token registration failed: ${response.statusCode} - ${response.body}');
+      LoggerService.warning(
+        'Push token registration failed: ${response.statusCode} - ${response.body}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error registering push token', e, stack);
     }
@@ -742,7 +1053,9 @@ class ApiService {
         final List<dynamic> list = body['data'] ?? body['notifications'] ?? [];
         return list.map((item) => item as Map<String, dynamic>).toList();
       }
-      LoggerService.warning('getNotifications failed: ${response.statusCode} - ${response.body}');
+      LoggerService.warning(
+        'getNotifications failed: ${response.statusCode} - ${response.body}',
+      );
     } catch (e, stack) {
       LoggerService.error('Error fetching push notifications', e, stack);
     }

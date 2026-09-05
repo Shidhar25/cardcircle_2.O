@@ -1,11 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 import '../../../core/services/api_service.dart';
 import '../../circle/state/circle_state.dart';
 import '../../auth/state/auth_state.dart';
-import '../../../shared/widgets/neo_pop_button.dart';
+import '../../../shared/widgets/gritty_background.dart';
+import '../../../shared/widgets/primitives.dart';
 
+/// v1 screen 20 — Notifications. Matches CardCircle.html's `isNotifications`
+/// block: back + title + "Mark read", then grouped rows (icon tile, text,
+/// timestamp, unread dot).
+///
+/// Real incoming follow requests need actionable approve/reject controls the
+/// prototype's plain notif row doesn't have, so they get their own section
+/// above the grouped list rather than being squeezed into that row shape.
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
@@ -37,7 +47,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void _showCardAccessSheet(String followId, String requesterName) {
     final authState = Provider.of<AuthState>(context, listen: false);
     final myCards = authState.user.cards;
-    // Pre-select all cards by default for better user convenience
     final List<String> selectedCards = myCards.map((c) => c.id).toList();
 
     showModalBottomSheet(
@@ -50,14 +59,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            final allSelected = myCards.isNotEmpty && selectedCards.length == myCards.length;
+            final allSelected =
+                myCards.isNotEmpty && selectedCards.length == myCards.length;
 
             return Container(
               padding: EdgeInsets.only(
-                left: 24,
-                right: 24,
-                top: 24,
-                bottom: 24 + MediaQuery.of(context).viewInsets.bottom,
+                left: AppSpacing.xl,
+                right: AppSpacing.xl,
+                top: AppSpacing.xl,
+                bottom:
+                    AppSpacing.xl + MediaQuery.of(context).viewInsets.bottom,
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -66,14 +77,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      const MonoLabel(
                         'MANAGE CARD ACCESS',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.mutedForeground,
-                          letterSpacing: 2.0,
-                        ),
+                        size: 10,
+                        letterSpacing: 2.0,
+                        color: AppColors.textDim,
                       ),
                       if (myCards.isNotEmpty)
                         GestureDetector(
@@ -82,39 +90,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                               if (allSelected) {
                                 selectedCards.clear();
                               } else {
-                                selectedCards.clear();
-                                selectedCards.addAll(myCards.map((c) => c.id));
+                                selectedCards
+                                  ..clear()
+                                  ..addAll(myCards.map((c) => c.id));
                               }
                             });
                           },
                           child: Text(
                             allSelected ? 'Deselect All' : 'Select All',
-                            style: const TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
+                            style: AppText.sans(
+                              12,
+                              weight: FontWeight.w500,
+                              color: AppColors.gold,
                             ),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: AppSpacing.sm),
                   Text(
                     'Select specific card(s) to show to $requesterName:',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+                    style: AppText.sans(
+                      15,
+                      weight: FontWeight.w500,
+                      color: AppColors.text,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.lg),
                   if (myCards.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 20.0),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 20),
                       child: Center(
                         child: Text(
                           'You have no cards added yet. Approving will share no cards.',
-                          style: TextStyle(color: AppColors.mutedForeground, fontSize: 13),
+                          style: AppText.sans(13, color: AppColors.textDim),
                         ),
                       ),
                     )
@@ -132,34 +141,48 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           return Container(
                             margin: const EdgeInsets.symmetric(vertical: 4),
                             decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(12),
+                              color: AppColors.surface,
+                              borderRadius: BorderRadius.circular(
+                                AppRadii.card,
+                              ),
                               border: Border.all(
-                                color: isSelected ? AppColors.primary : AppColors.border,
+                                color: isSelected
+                                    ? AppColors.gold
+                                    : AppColors.border,
                                 width: isSelected ? 1.5 : 1.0,
                               ),
                             ),
                             child: CheckboxListTile(
                               value: isSelected,
-                              activeColor: AppColors.primary,
-                              checkColor: Colors.black,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                              activeColor: AppColors.gold,
+                              checkColor: AppColors.background,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg,
+                                vertical: 4,
+                              ),
                               title: Text(
                                 card.name,
-                                style: const TextStyle(
-                                    color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                                style: AppText.sans(
+                                  14,
+                                  weight: FontWeight.w500,
+                                  color: AppColors.text,
+                                ),
                               ),
                               subtitle: Text(
                                 card.bank,
-                                style: const TextStyle(
-                                    color: AppColors.mutedForeground, fontSize: 11),
+                                style: AppText.sans(
+                                  11,
+                                  color: AppColors.textDim,
+                                ),
                               ),
                               secondary: Container(
                                 width: 36,
                                 height: 24,
                                 decoration: BoxDecoration(
                                   borderRadius: BorderRadius.circular(4),
-                                  gradient: LinearGradient(colors: card.gradientColors),
+                                  gradient: LinearGradient(
+                                    colors: card.gradientColors,
+                                  ),
                                 ),
                               ),
                               onChanged: (val) {
@@ -176,48 +199,50 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                         },
                       ),
                     ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: AppSpacing.xl),
                   Row(
                     children: [
                       Expanded(
                         child: TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Cancel',
-                              style: TextStyle(
-                                  color: AppColors.mutedForeground,
-                                  fontWeight: FontWeight.w600)),
+                          child: Text(
+                            'Cancel',
+                            style: AppText.sans(
+                              13,
+                              weight: FontWeight.w500,
+                              color: AppColors.textDim,
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: AppSpacing.md),
                       Expanded(
-                        child: NeoPopButton.primary(
-                          onPressed: () async {
+                        child: GoldButton(
+                          label: 'Confirm & Allow',
+                          height: 46,
+                          onTap: () async {
+                            // Both resolved before the pop: this context
+                            // belongs to the sheet being dismissed, so it is
+                            // defunct by the time the request returns.
+                            final messenger = ScaffoldMessenger.of(context);
+                            final circle = Provider.of<CircleState>(
+                              context,
+                              listen: false,
+                            );
                             Navigator.pop(context);
-                            setState(() {
-                              _isLoading = true;
-                            });
-                            final circleState =
-                                Provider.of<CircleState>(context, listen: false);
-                            final ok =
-                                await circleState.approveRequest(followId, selectedCards);
-                            setState(() {
-                              _isLoading = false;
-                            });
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(ok
-                                      ? 'Follow request approved with ${selectedCards.length} card(s) shared!'
-                                      : 'Failed to approve request.'),
-                                  backgroundColor: ok ? AppColors.green : Colors.red,
-                                ),
-                              );
-                            }
+                            setState(() => _isLoading = true);
+                            final result = await circle.approveRequest(
+                              followId,
+                              selectedCards,
+                            );
+                            if (mounted) setState(() => _isLoading = false);
+                            messenger.showResult(
+                              result,
+                              onSuccess:
+                                  'Approved — ${selectedCards.length} card(s) shared.',
+                              onFailure: 'Could not approve that request.',
+                            );
                           },
-                          fullWidth: true,
-                          depth: 4.0,
-                          child: const NeoPopButtonText('Confirm & Allow',
-                              color: Color(0xFF050505), fontSize: 13),
                         ),
                       ),
                     ],
@@ -238,283 +263,328 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(
-        backgroundColor: AppColors.background,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: const Text(
-          'Notifications',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            letterSpacing: -0.5,
-          ),
-        ),
-        centerTitle: true,
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async {
-          await circleState.fetchIncomingRequests();
-          await _fetchPushNotifications();
-        },
-        color: AppColors.primary,
-        backgroundColor: AppColors.card,
-        child: _isLoading
-            ? const Center(
-                child: CircularProgressIndicator(
-                    valueColor: AlwaysStoppedAnimation(AppColors.primary)))
-            : (requests.isEmpty && _pushNotifications.isEmpty)
-                ? SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Container(
-                      height: MediaQuery.of(context).size.height * 0.7,
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(
-                            Icons.notifications_none_rounded,
-                            size: 54,
-                            color: AppColors.mutedForeground,
-                          ),
-                          SizedBox(height: 16),
-                          Text(
-                            'No new notifications',
-                            style: TextStyle(
-                              color: AppColors.mutedForeground,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
+      body: GrittyBackground(
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.xl,
+                  AppSpacing.md,
+                  AppSpacing.xl,
+                  AppSpacing.mdLg,
+                ),
+                child: Row(
+                  children: [
+                    IconTile(
+                      icon: PhosphorIconsRegular.arrowLeft,
+                      iconSize: 17,
+                      onTap: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: AppSpacing.mdLg),
+                    Expanded(
+                      child: Text(
+                        'Notifications',
+                        style: AppText.sans(
+                          20,
+                          weight: FontWeight.w500,
+                          color: AppColors.text,
+                          letterSpacing: -0.3,
+                        ),
                       ),
                     ),
-                  )
-                : ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      // Section 1: Incoming Follow Requests
-                      if (requests.isNotEmpty) ...[
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12.0),
-                          child: Text(
-                            'FOLLOW REQUESTS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
-                              letterSpacing: 1.2,
-                            ),
+                    Text(
+                      'Mark read',
+                      style: AppText.sans(11.5, color: AppColors.gold),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: () async {
+                    await circleState.fetchIncomingRequests();
+                    await _fetchPushNotifications();
+                  },
+                  color: AppColors.gold,
+                  backgroundColor: AppColors.surface,
+                  child: _isLoading
+                      ? const Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.gold,
+                            strokeWidth: 2,
                           ),
-                        ),
-                        ...requests.map((req) {
-                          final followId = req['follow_id'] ?? '';
-                          final name = req['follower_display_name'] ??
-                              req['name'] ??
-                              'Unknown Saver';
-                          final username = req['follower_username'] ??
-                              req['username'] ??
-                              name.toLowerCase().replaceAll(' ', '');
-
-                          String initials = 'C';
-                          if (name.isNotEmpty) {
-                            try {
-                              final clean =
-                                  name.trim().replaceAll(RegExp(r'[^\w]'), '');
-                              initials =
-                                  clean.isNotEmpty ? clean[0].toUpperCase() : 'C';
-                            } catch (_) {}
-                          }
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [Color(0xFF8E2DE2), Color(0xFF4A00E0)],
+                        )
+                      : (requests.isEmpty && _pushNotifications.isEmpty)
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            SizedBox(
+                              height: MediaQuery.of(context).size.height * 0.6,
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(
+                                      PhosphorIconsRegular.bellSlash,
+                                      size: 40,
+                                      color: AppColors.textGhost,
                                     ),
-                                  ),
-                                  alignment: Alignment.center,
-                                  child: Text(
-                                    initials,
-                                    style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 13),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        name,
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      'No new notifications',
+                                      style: AppText.sans(
+                                        14,
+                                        color: AppColors.textDim,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '@$username requested to follow you',
-                                        style: const TextStyle(
-                                            color: AppColors.mutedForeground,
-                                            fontSize: 12),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                TextButton(
-                                  onPressed: () async {
-                                    setState(() {
-                                      _isLoading = true;
-                                    });
-                                    final ok =
-                                        await circleState.rejectRequest(followId);
-                                    setState(() {
-                                      _isLoading = false;
-                                    });
-                                    if (mounted) {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text(ok
-                                              ? 'Follow request rejected for $name.'
-                                              : 'Failed to reject request.'),
-                                          backgroundColor:
-                                              ok ? AppColors.green : Colors.red,
-                                        ),
-                                      );
-                                    }
-                                  },
-                                  style: TextButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 10, vertical: 8),
-                                  ),
-                                  child: const Text(
-                                    'Reject',
-                                    style: TextStyle(
-                                        color: AppColors.mutedForeground,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                NeoPopButton.primary(
-                                  onPressed: () =>
-                                      _showCardAccessSheet(followId, name),
-                                  fullWidth: false,
-                                  depth: 3.0,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 8),
-                                  child: const NeoPopButtonText('Approve',
-                                      color: Color(0xFF050505), fontSize: 11),
-                                ),
-                              ],
+                              ),
                             ),
-                          );
-                        }),
-                        const SizedBox(height: 16),
-                      ],
-
-                      // Section 2: General Push Notifications
-                      if (_pushNotifications.isNotEmpty) ...[
-                        const Padding(
-                          padding: EdgeInsets.only(bottom: 12.0),
-                          child: Text(
-                            'RECENT NOTIFICATIONS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.mutedForeground,
-                              letterSpacing: 1.2,
-                            ),
+                          ],
+                        )
+                      : ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          padding: const EdgeInsets.fromLTRB(
+                            AppSpacing.xl,
+                            0,
+                            AppSpacing.xl,
+                            30,
                           ),
-                        ),
-                        ..._pushNotifications.map((notif) {
-                          final title = notif['title'] ?? 'Notification';
-                          final message =
-                              notif['body'] ?? notif['message'] ?? '';
-                          final time = notif['created_at'] ?? 'Recently';
+                          children: [
+                            if (requests.isNotEmpty) ...[
+                              const MonoLabel(
+                                'FOLLOW REQUESTS',
+                                size: 9.5,
+                                letterSpacing: 1.8,
+                                color: AppColors.textFaint,
+                              ),
+                              const SizedBox(height: AppSpacing.mdLg),
+                              ...List.generate(requests.length, (index) {
+                                final req = requests[index];
+                                final followId = req['follow_id'] ?? '';
+                                final name =
+                                    req['follower_display_name'] ??
+                                    req['name'] ??
+                                    'Unknown Saver';
+                                final username =
+                                    req['follower_username'] ??
+                                    req['username'] ??
+                                    name.toLowerCase().replaceAll(' ', '');
+                                final initials = name.isNotEmpty
+                                    ? name.trim()[0].toUpperCase()
+                                    : 'C';
 
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: AppColors.card,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.12),
-                                    shape: BoxShape.circle,
+                                return Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.sm,
                                   ),
-                                  child: const Icon(
-                                      Icons.notifications_active_rounded,
-                                      color: AppColors.primary,
-                                      size: 18),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        title,
-                                        style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 13),
-                                      ),
-                                      if (message.isNotEmpty) ...[
-                                        const SizedBox(height: 3),
-                                        Text(
-                                          message,
-                                          style: const TextStyle(
-                                              color: AppColors.mutedForeground,
-                                              fontSize: 12),
+                                  child: OutlinedSurface(
+                                    padding: const EdgeInsets.all(
+                                      AppSpacing.mdLg,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        AvatarBubble(
+                                          initials: initials,
+                                          size: 40,
+                                          hue: AvatarHue.values[index % 4],
+                                        ),
+                                        const SizedBox(width: AppSpacing.mdLg),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                name,
+                                                style: AppText.sans(
+                                                  14,
+                                                  weight: FontWeight.w500,
+                                                  color: AppColors.text,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                '@$username requested to follow you',
+                                                style: AppText.sans(
+                                                  12,
+                                                  color: AppColors.textDim,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        TextButton(
+                                          onPressed: () async {
+                                            // Captured before the await; this
+                                            // context is the dialog's.
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            setState(() => _isLoading = true);
+                                            final result = await circleState
+                                                .rejectRequest(followId);
+                                            if (mounted) {
+                                              setState(
+                                                () => _isLoading = false,
+                                              );
+                                            }
+                                            messenger.showResult(
+                                              result,
+                                              onSuccess:
+                                                  'Request from $name rejected.',
+                                              onFailure:
+                                                  'Could not reject that request.',
+                                            );
+                                          },
+                                          style: TextButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 10,
+                                              vertical: 8,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Reject',
+                                            style: AppText.sans(
+                                              12,
+                                              weight: FontWeight.w500,
+                                              color: AppColors.textDim,
+                                            ),
+                                          ),
+                                        ),
+                                        GestureDetector(
+                                          onTap: () => _showCardAccessSheet(
+                                            followId,
+                                            name,
+                                          ),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 12,
+                                              vertical: 8,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              borderRadius:
+                                                  BorderRadius.circular(
+                                                    AppRadii.pill,
+                                                  ),
+                                              color: AppColors.gold.withValues(
+                                                alpha: 0.12,
+                                              ),
+                                              border: Border.all(
+                                                color: AppColors.gold,
+                                              ),
+                                            ),
+                                            child: Text(
+                                              'Approve',
+                                              style: AppText.sans(
+                                                11,
+                                                weight: FontWeight.w500,
+                                                color: AppColors.gold,
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ],
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        time,
-                                        style: const TextStyle(
-                                            color: Colors.white38,
-                                            fontSize: 10),
-                                      ),
-                                    ],
+                                    ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                      ],
-                    ],
-                  ),
+                                );
+                              }),
+                              const SizedBox(height: AppSpacing.md),
+                            ],
+                            if (_pushNotifications.isNotEmpty) ...[
+                              const MonoLabel(
+                                'RECENT NOTIFICATIONS',
+                                size: 9.5,
+                                letterSpacing: 1.8,
+                                color: AppColors.textFaint,
+                              ),
+                              const SizedBox(height: AppSpacing.mdLg),
+                              ..._pushNotifications.map((notif) {
+                                final title = notif['title'] ?? 'Notification';
+                                final message =
+                                    notif['body'] ?? notif['message'] ?? '';
+                                final time = notif['created_at'] ?? 'Recently';
+
+                                return Padding(
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.sm,
+                                  ),
+                                  child: OutlinedSurface(
+                                    padding: const EdgeInsets.all(
+                                      AppSpacing.mdLg,
+                                    ),
+                                    child: Row(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                          width: 34,
+                                          height: 34,
+                                          alignment: Alignment.center,
+                                          decoration: BoxDecoration(
+                                            borderRadius: BorderRadius.circular(
+                                              AppRadii.card,
+                                            ),
+                                            color: AppColors.elevated,
+                                          ),
+                                          child: const Icon(
+                                            PhosphorIconsFill.bell,
+                                            size: 16,
+                                            color: AppColors.gold,
+                                          ),
+                                        ),
+                                        const SizedBox(width: AppSpacing.mdLg),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                title,
+                                                style: AppText.sans(
+                                                  13,
+                                                  color: AppColors.text,
+                                                  height: 1.4,
+                                                ),
+                                              ),
+                                              if (message
+                                                  .toString()
+                                                  .isNotEmpty) ...[
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  message.toString(),
+                                                  style: AppText.sans(
+                                                    12,
+                                                    color: AppColors.textDim,
+                                                    height: 1.4,
+                                                  ),
+                                                ),
+                                              ],
+                                              const SizedBox(height: 5),
+                                              MonoLabel(
+                                                '$time',
+                                                size: 9,
+                                                letterSpacing: 1.1,
+                                                color: AppColors.textGhost,
+                                                uppercase: false,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ],
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
