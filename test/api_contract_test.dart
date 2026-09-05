@@ -226,4 +226,86 @@ void main() {
       expect(OtpSession.idFor('+919000010001'), isNull);
     });
   });
+
+  group('inviting a contact', () {
+    // The server sends nothing itself: it returns a wa.me deep link the
+    // user sends from WhatsApp, and enforces a per-contact cooldown.
+    test('a successful invite carries the link to open', () {
+      final r = ApiResult.fromResponse(
+        _res({
+          'success': true,
+          'message': 'Invite link generated',
+          'data': {
+            'contact_id': 'c1',
+            'mobile_number': '+919000010099',
+            'whatsapp_url':
+                'https://wa.me/919000010099?text=Join%20me%20on%20CardCircle',
+            'invite_count': 1,
+            'last_invited_at': '2026-09-05T09:00:00.000Z',
+          },
+        }, 200),
+        action: 'Invite contact',
+      );
+
+      expect(r.ok, isTrue);
+      expect(r.data?['whatsapp_url'], startsWith('https://wa.me/'));
+      expect(r.data?['invite_count'], 1);
+    });
+
+    test('the cooldown reply explains itself rather than failing blankly', () {
+      // 429 with hours remaining. Nothing should open; the user is told
+      // why, in the server's own words.
+      final r = ApiResult.fromResponse(
+        _res({
+          'success': false,
+          'message': 'Already invited. Try again in 23 hours.',
+        }, 429),
+        action: 'Invite contact',
+      );
+
+      expect(r.ok, isFalse);
+      expect(r.statusCode, 429);
+      expect(r.display('fallback'), contains('23 hours'));
+      expect(r.data?['whatsapp_url'], isNull);
+    });
+
+    test('inviting someone already registered is refused', () {
+      final r = ApiResult.fromResponse(
+        _res({
+          'success': false,
+          'status': 400,
+          'message': 'Contact is already a CardCircle user',
+        }, 400),
+        action: 'Invite contact',
+      );
+      expect(r.ok, isFalse);
+      expect(r.display('fallback'), contains('already a CardCircle user'));
+    });
+
+    test('an unknown contact is a 404, not a crash', () {
+      final r = ApiResult.fromResponse(
+        _res({
+          'success': false,
+          'status': 404,
+          'message': 'Contact not found',
+        }, 404),
+        action: 'Invite contact',
+      );
+      expect(r.ok, isFalse);
+      expect(r.statusCode, 404);
+    });
+
+    test('a success with no link is treated as unusable by the caller', () {
+      // The screen guards on this: ok but nothing to open.
+      final r = ApiResult.fromResponse(
+        _res({
+          'success': true,
+          'data': {'contact_id': 'c1'},
+        }, 200),
+        action: 'Invite contact',
+      );
+      expect(r.ok, isTrue);
+      expect((r.data?['whatsapp_url'] ?? '').toString(), isEmpty);
+    });
+  });
 }

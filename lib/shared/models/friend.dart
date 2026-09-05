@@ -12,7 +12,18 @@ import 'contact_action.dart';
 /// shaped is now derived from [action].
 @immutable
 class Friend {
+  /// The matched CardCircle user id when there is one, otherwise the
+  /// directory's contact id. Follow/unfollow address people by this.
   final String id;
+
+  /// The address-book row id (`contact_id`), always present.
+  ///
+  /// Kept separate from [id] because invites are addressed by contact,
+  /// never by user — an invite-only contact has no user id at all. The two
+  /// happen to be equal for invite-only rows, and relying on that
+  /// coincidence is how the wrong id ends up in a request.
+  final String contactId;
+
   final String name;
   final String username;
   final String initials;
@@ -28,6 +39,7 @@ class Friend {
 
   const Friend({
     required this.id,
+    required this.contactId,
     required this.name,
     required this.username,
     required this.initials,
@@ -45,6 +57,7 @@ class Friend {
   /// Returns a copy in a new relationship state, for optimistic updates.
   Friend withAction(ContactAction next) => Friend(
     id: id,
+    contactId: contactId,
     name: name,
     username: username,
     initials: initials,

@@ -842,6 +842,32 @@ class ApiService {
     }
   }
 
+  /// Invites an address-book contact who is not on CardCircle yet
+  /// (`POST /user/contacts/{contactId}/invite`).
+  ///
+  /// The server does not send anything: it returns a `wa.me` deep link with
+  /// a prefilled message for the user to send themselves. It also enforces
+  /// a 24-hour cooldown per contact (429) and refuses contacts who already
+  /// have an account (400), so the caller should show the server's message
+  /// rather than assume success.
+  static Future<ApiResult<Map<String, dynamic>>> inviteContact(
+    String contactId,
+  ) async {
+    try {
+      LoggerService.info('Inviting contact $contactId...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/user/contacts/$contactId/invite'),
+        headers: _headers(requireAuth: true),
+      );
+      return ApiResult.fromResponse(response, action: 'Invite contact');
+    } catch (e, stack) {
+      LoggerService.error('Error inviting contact $contactId', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
   /// The cards a person you follow has shared with you
   /// (`GET /follow/following/{followId}/cards`).
   static Future<List<Map<String, dynamic>>?> getSharedCards(

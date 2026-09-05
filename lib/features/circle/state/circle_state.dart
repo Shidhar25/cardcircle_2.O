@@ -248,6 +248,7 @@ class CircleState extends ChangeNotifier {
         directoryFriends.add(
           Friend(
             id: matchedUserId.isNotEmpty ? matchedUserId : contactId,
+            contactId: contactId,
             name: contactName,
             username: isMatched ? '@$displayName' : 'Not on CardCircle',
             initials: initials.toUpperCase(),
