@@ -145,29 +145,6 @@ class CircleState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Whether the follow already runs both ways with [userId].
-  ///
-  /// Reads `follow_back_status` from the followers list, which the server
-  /// added for exactly this: null means no relationship in that direction,
-  /// `PENDING` means a request is awaiting their approval, and `APPROVED`
-  /// means it is done. Anything non-null is a question already answered.
-  bool followsBack(String userId) {
-    for (final f in _followers) {
-      if (f['user_id'] == userId) {
-        final status = f['follow_back_status'];
-        return status != null && status.toString().isNotEmpty;
-      }
-    }
-    // Not in the followers list at all — nothing to reciprocate.
-    return true;
-  }
-
-  /// Test seam: seeds the followers list without a network round trip.
-  @visibleForTesting
-  void setFollowersForTest(List<Map<String, dynamic>> followers) {
-    _followers = followers;
-  }
-
   Future<void> fetchFollowersAndFollowing() async {
     _isLoadingFollowersFollowing = true;
     notifyListeners();

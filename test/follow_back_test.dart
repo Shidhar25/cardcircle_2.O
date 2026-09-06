@@ -1,71 +1,53 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:cardcircle/features/circle/state/circle_state.dart';
+import 'package:cardcircle/shared/models/follow_back_status.dart';
 
-/// `follow_back_status` decides whether the app offers to reciprocate.
-/// Getting it wrong either nags someone who already followed back, or
-/// silently drops the offer for someone who has not — so each value is
-/// pinned.
+/// `follow_back_status` decides whether the Followers list offers a
+/// reciprocal follow. Getting it wrong either nags someone who has already
+/// followed back, or silently drops the offer for someone who has not — so
+/// each value is pinned.
 void main() {
-  group('followsBack', () {
-    CircleState stateWith(List<Map<String, dynamic>> followers) {
-      final state = CircleState();
-      state.setFollowersForTest(followers);
-      return state;
-    }
-
+  group('parsing the server value', () {
     test('null means the offer is still open', () {
-      final state = stateWith([
-        {'user_id': 'u1', 'follow_back_status': null},
-      ]);
-      expect(state.followsBack('u1'), isFalse);
+      expect(FollowBackStatus.parse(null), FollowBackStatus.open);
+      expect(FollowBackStatus.parse(null).canFollowBack, isTrue);
     });
 
-    test('PENDING means already asked — do not ask again', () {
-      // The request is sitting with them; re-asking would send a duplicate
-      // the server rejects.
-      final state = stateWith([
-        {'user_id': 'u1', 'follow_back_status': 'PENDING'},
-      ]);
-      expect(state.followsBack('u1'), isTrue);
+    test('PENDING means the request already sits with them', () {
+      // Offering again would send a duplicate the server rejects.
+      expect(FollowBackStatus.parse('PENDING'), FollowBackStatus.requested);
+      expect(FollowBackStatus.parse('PENDING').canFollowBack, isFalse);
     });
 
     test('APPROVED means it is already mutual', () {
-      final state = stateWith([
-        {'user_id': 'u1', 'follow_back_status': 'APPROVED'},
-      ]);
-      expect(state.followsBack('u1'), isTrue);
+      expect(FollowBackStatus.parse('APPROVED'), FollowBackStatus.mutual);
+      expect(FollowBackStatus.parse('APPROVED').canFollowBack, isFalse);
     });
 
+    test('case and surrounding space do not matter', () {
+      expect(FollowBackStatus.parse('  pending '), FollowBackStatus.requested);
+      expect(FollowBackStatus.parse('Approved'), FollowBackStatus.mutual);
+    });
+  });
+
+  group('values that are not real states', () {
     test('an empty string is treated as no relationship', () {
-      // Defensive: an empty status is not a real state, and treating it as
-      // "already handled" would silently drop the offer.
-      final state = stateWith([
-        {'user_id': 'u1', 'follow_back_status': ''},
-      ]);
-      expect(state.followsBack('u1'), isFalse);
+      // Reading it as "already handled" would drop the offer invisibly,
+      // which is the worse failure.
+      expect(FollowBackStatus.parse(''), FollowBackStatus.open);
+      expect(FollowBackStatus.parse('   '), FollowBackStatus.open);
     });
 
-    test('someone absent from the followers list is not offered', () {
-      // They do not follow you, so there is nothing to reciprocate.
-      final state = stateWith([
-        {'user_id': 'someone-else', 'follow_back_status': null},
-      ]);
-      expect(state.followsBack('u1'), isTrue);
+    test('an unknown status stays quiet rather than offering', () {
+      // The server knows about a relationship this build does not; a
+      // follow offered here would only be rejected.
+      expect(FollowBackStatus.parse('BLOCKED').canFollowBack, isFalse);
+      expect(FollowBackStatus.parse('REJECTED').canFollowBack, isFalse);
+      expect(FollowBackStatus.parse('SOMETHING_NEW').canFollowBack, isFalse);
     });
 
-    test('an empty followers list offers nothing', () {
-      expect(stateWith(const []).followsBack('u1'), isTrue);
-    });
-
-    test('the right follower is matched among several', () {
-      final state = stateWith([
-        {'user_id': 'a', 'follow_back_status': 'APPROVED'},
-        {'user_id': 'b', 'follow_back_status': null},
-        {'user_id': 'c', 'follow_back_status': 'PENDING'},
-      ]);
-      expect(state.followsBack('a'), isTrue);
-      expect(state.followsBack('b'), isFalse);
-      expect(state.followsBack('c'), isTrue);
+    test('a non-string value does not throw', () {
+      expect(FollowBackStatus.parse(42).canFollowBack, isFalse);
+      expect(FollowBackStatus.parse(true).canFollowBack, isFalse);
     });
   });
 }

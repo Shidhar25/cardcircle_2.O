@@ -11,6 +11,7 @@ import '../../../core/services/device_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../state/circle_state.dart';
 import '../../../shared/models/contact_action.dart';
+import '../../../shared/models/follow_back_status.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -316,7 +317,6 @@ class _CircleScreenState extends State<CircleScreen> {
     String requesterName, {
     _AccessMode mode = _AccessMode.approve,
     List<String> preselected = const [],
-    String? followerUserId,
   }) {
     final authState = Provider.of<AuthState>(context, listen: false);
     final myCards = authState.user.cards;
@@ -502,17 +502,6 @@ class _CircleScreenState extends State<CircleScreen> {
                                   ? 'Could not approve that request.'
                                   : 'Could not update access.',
                             );
-
-                            // The moment to reciprocate is right after
-                            // approving, not buried in a tab.
-                            if (result.ok &&
-                                mode == _AccessMode.approve &&
-                                followerUserId != null) {
-                              await _offerFollowBack(
-                                followerUserId,
-                                requesterName,
-                              );
-                            }
                           },
                         ),
                       ),
@@ -944,9 +933,7 @@ class _CircleScreenState extends State<CircleScreen> {
             permissionLine: _permissionLine(
               (rows[i]['follow_id'] ?? '').toString(),
             ),
-            // null means no relationship the other way, so a follow back is
-            // still open to them. PENDING/APPROVED are already answered.
-            followBackStatus: (rows[i]['follow_back_status'])?.toString(),
+            followBack: FollowBackStatus.parse(rows[i]['follow_back_status']),
             onFollowBack: () => _handleToggleFollow(
               (rows[i]['user_id'] ?? '').toString(),
               (rows[i]['name'] ?? 'them').toString(),
@@ -995,8 +982,6 @@ class _CircleScreenState extends State<CircleScreen> {
               onApprove: () => _showCardAccessSheet(
                 (incoming[i]['follow_id'] ?? '').toString(),
                 (incoming[i]['follower_display_name'] ?? 'them').toString(),
-                followerUserId: (incoming[i]['follower_user_id'] ?? '')
-                    .toString(),
               ),
               onReject: () => _handleRejectRequest(
                 (incoming[i]['follow_id'] ?? '').toString(),
@@ -1195,72 +1180,6 @@ class _CircleScreenState extends State<CircleScreen> {
     } catch (e, stack) {
       LoggerService.error('Failed to open invite link', e, stack);
       messenger.showError('Could not open WhatsApp.');
-    }
-  }
-
-  /// Offers to follow someone back after approving their request.
-  ///
-  /// Approving is one-directional — they can see your cards, you still
-  /// cannot see theirs — and the reciprocal follow is a separate request
-  /// that needs their approval too. Without asking here, the natural
-  /// moment to reciprocate passes unmarked and the relationship stays
-  /// lopsided.
-  ///
-  /// `follow_back_status` on the followers list is authoritative: null
-  /// means no relationship in that direction, so anything else means the
-  /// question has already been answered and is not asked again.
-  Future<void> _offerFollowBack(String userId, String name) async {
-    if (userId.isEmpty || !mounted) return;
-
-    final circle = Provider.of<CircleState>(context, listen: false);
-    if (circle.followsBack(userId)) return;
-
-    final wantsTo = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppRadii.card),
-        ),
-        title: Text(
-          'Follow $name back?',
-          style: AppText.sans(
-            15,
-            weight: FontWeight.w500,
-            color: AppColors.text,
-          ),
-        ),
-        content: Text(
-          '$name can see the cards you shared. Following them back lets you '
-          'see theirs — they will need to approve it.',
-          style: AppText.sans(13, color: AppColors.textDim, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: Text(
-              'Not now',
-              style: AppText.sans(13, color: AppColors.textDim),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: Text(
-              'Follow back',
-              style: AppText.sans(
-                13,
-                weight: FontWeight.w500,
-                color: AppColors.gold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-
-    if (wantsTo == true && mounted) {
-      await _handleToggleFollow(userId, name);
-      if (mounted) await circle.fetchFollowersAndFollowing();
     }
   }
 
@@ -1638,10 +1557,9 @@ class _FollowerCard extends StatelessWidget {
   final String status;
   final String permissionLine;
 
-  /// `follow_back_status` from the followers list: null when you do not
-  /// follow them, `PENDING` while your request awaits their approval,
-  /// `APPROVED` once it is mutual.
-  final String? followBackStatus;
+  /// Whether following them back is still open, already requested, or
+  /// already mutual.
+  final FollowBackStatus followBack;
 
   final VoidCallback onEditAccess;
   final VoidCallback onFollowBack;
@@ -1653,7 +1571,7 @@ class _FollowerCard extends StatelessWidget {
     required this.username,
     required this.status,
     required this.permissionLine,
-    required this.followBackStatus,
+    required this.followBack,
     required this.onEditAccess,
     required this.onFollowBack,
   });
@@ -1734,9 +1652,10 @@ class _FollowerCard extends StatelessWidget {
                 _SmallButton(label: 'Edit access', onTap: onEditAccess),
               ],
             ),
-            // A standing route to reciprocate, for anyone who declined the
-            // prompt when they approved.
-            if (followBackStatus == null) ...[
+            // Approving is one-directional: they can see the cards you
+            // shared, you still cannot see theirs. This is the route to
+            // even that up.
+            if (followBack == FollowBackStatus.open) ...[
               const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
@@ -1746,7 +1665,7 @@ class _FollowerCard extends StatelessWidget {
                   onTap: onFollowBack,
                 ),
               ),
-            ] else if (followBackStatus!.toUpperCase() == 'PENDING') ...[
+            ] else if (followBack == FollowBackStatus.requested) ...[
               const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
