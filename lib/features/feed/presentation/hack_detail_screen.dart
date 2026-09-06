@@ -1,14 +1,17 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../auth/state/auth_state.dart';
 import '../../../shared/models/hack.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/primitives.dart';
 
 /// v1 screen 22 — Benefit detail: a full-bleed hero image, the benefit's
-/// title, a You Save / Circle Using stat pair, a numbered "HOW TO APPLY"
-/// step timeline, a gold "Things to note" panel, and Save/Share actions.
+/// title, a You Save / Circle Using stat pair, a numbered "HOW TO AVAIL
+/// THIS BENEFIT" timeline, a gold "Things to note" panel, and Save/Share
+/// actions.
 ///
 /// The hero is sized from the viewport rather than pinned at a constant, so
 /// it keeps roughly the same proportion of the screen on a small phone and
@@ -59,6 +62,9 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
 
     final steps = hack.steps;
     final media = MediaQuery.of(context);
+    final myCardNames = hack.myCardNames(
+      Provider.of<AuthState>(context, listen: false).user.cards,
+    );
 
     // Sized from the artwork, not the viewport. Benefit images are wide —
     // 2720x1360 for most of the catalog, so 2:1 — and a hero shaped to the
@@ -129,6 +135,32 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                           height: 1.26,
                         ),
                       ),
+                      // Which of the reader's own cards this works with.
+                      // Named rather than counted, and omitted when none
+                      // match, so it never claims a card the user lacks.
+                      if (myCardNames.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.md),
+                        Row(
+                          children: [
+                            const Icon(
+                              PhosphorIconsRegular.creditCard,
+                              size: 14,
+                              color: AppColors.gold,
+                            ),
+                            const SizedBox(width: 7),
+                            Expanded(
+                              child: Text(
+                                'Works with ${myCardNames.join(', ')}',
+                                style: AppText.sans(
+                                  12,
+                                  color: AppColors.textDim,
+                                  height: 1.4,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -214,7 +246,7 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                       if (steps.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.xxl),
                         const MonoLabel(
-                          'HOW TO APPLY',
+                          'HOW TO AVAIL THIS BENEFIT',
                           size: 9.5,
                           letterSpacing: 1.8,
                           color: AppColors.textFaint,
@@ -251,9 +283,13 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                     children: [
                                       Column(
                                         children: [
+                                          // The step's own icon from the
+                                          // API, falling back to the
+                                          // ordinal when a step ships
+                                          // without one.
                                           Container(
-                                            width: 28,
-                                            height: 28,
+                                            width: 30,
+                                            height: 30,
                                             alignment: Alignment.center,
                                             decoration: BoxDecoration(
                                               shape: BoxShape.circle,
@@ -263,15 +299,22 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                                     .withValues(alpha: 0.5),
                                               ),
                                             ),
-                                            child: Text(
-                                              '${i + 1}',
-                                              style: AppText.mono(
-                                                11,
-                                                ls: 0,
-                                                w: FontWeight.w700,
-                                                c: AppColors.gold,
-                                              ),
-                                            ),
+                                            child: step.icon.isNotEmpty
+                                                ? Text(
+                                                    step.icon,
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                    ),
+                                                  )
+                                                : Text(
+                                                    '${i + 1}',
+                                                    style: AppText.mono(
+                                                      11,
+                                                      ls: 0,
+                                                      w: FontWeight.w700,
+                                                      c: AppColors.gold,
+                                                    ),
+                                                  ),
                                           ),
                                           if (!isLast)
                                             Expanded(
@@ -296,9 +339,8 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                                 CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                step.heading.isNotEmpty
-                                                    ? step.heading
-                                                    : step.name,
+                                                'Step ${i + 1} · '
+                                                '${step.heading.isNotEmpty ? step.heading : step.name}',
                                                 style: AppText.sans(
                                                   13.5,
                                                   weight: FontWeight.w500,

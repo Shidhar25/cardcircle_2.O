@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../../core/config/remote_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../state/feed_state.dart';
+import '../../auth/state/auth_state.dart';
 import '../../profile/state/category_state.dart';
 import '../../../shared/models/spend_category.dart';
 import '../../../shared/models/hack.dart';
@@ -105,7 +106,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       final matchesQuery =
           _query.isEmpty ||
           h.title.toLowerCase().contains(_query) ||
-          h.cardName.toLowerCase().contains(_query) ||
+          h.description.toLowerCase().contains(_query) ||
           h.category.toLowerCase().contains(_query);
       return matchesCat && matchesQuery;
     }).toList();
@@ -434,6 +435,35 @@ class _FeedFooter extends StatelessWidget {
   }
 }
 
+/// The benefit's rating, or nothing when it has not been rated.
+class _RatingLine extends StatelessWidget {
+  final double? rating;
+
+  const _RatingLine({required this.rating});
+
+  @override
+  Widget build(BuildContext context) {
+    final value = rating;
+    if (value == null) return const SizedBox.shrink();
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Icon(PhosphorIconsFill.star, size: 11, color: AppColors.gold),
+        const SizedBox(width: 4),
+        Text(
+          value.toStringAsFixed(1),
+          style: AppText.mono(
+            9.5,
+            ls: 0.4,
+            w: FontWeight.w700,
+            c: AppColors.gold,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _HackRow extends StatelessWidget {
   final Hack hack;
   final AvatarHue hue;
@@ -449,6 +479,10 @@ class _HackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final myCardNames = hack.myCardNames(
+      Provider.of<AuthState>(context, listen: false).user.cards,
+    );
+
     return OutlinedSurface(
       padding: EdgeInsets.zero,
       child: Column(
@@ -480,15 +514,11 @@ class _HackRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      MonoLabel(
-                        '${hack.authorLevel} · ${hack.timestamp}',
-                        size: 9,
-                        letterSpacing: 1.1,
-                        color: AppColors.textGhost,
-                        uppercase: true,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      // The rating, where the benefit has one. This line
+                      // used to read "VERIFIED · RECENTLY" — two hardcoded
+                      // constants identical on every row, telling the
+                      // reader nothing.
+                      _RatingLine(rating: hack.rating),
                     ],
                   ),
                 ),
@@ -582,15 +612,19 @@ class _HackRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.xs),
-                      Flexible(
-                        child: MetaChip(
-                          icon: PhosphorIconsRegular.creditCard,
-                          iconColor: AppColors.gold,
-                          background: AppColors.elevated,
-                          label: hack.cardName,
-                          labelColor: const Color(0xFFB2B6CA),
+                      // Which of the reader's own cards this works with.
+                      // Hidden entirely when none match, rather than
+                      // claiming "All Credit Cards" as it used to.
+                      if (myCardNames.isNotEmpty)
+                        Flexible(
+                          child: MetaChip(
+                            icon: PhosphorIconsRegular.creditCard,
+                            iconColor: AppColors.gold,
+                            background: AppColors.elevated,
+                            label: myCardNames.join(', '),
+                            labelColor: const Color(0xFFB2B6CA),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

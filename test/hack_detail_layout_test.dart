@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
+import 'package:provider/provider.dart';
+import 'package:cardcircle/features/auth/state/auth_state.dart';
 import 'package:cardcircle/features/feed/presentation/hack_detail_screen.dart';
 import 'package:cardcircle/shared/models/hack.dart';
 
@@ -21,7 +23,8 @@ Hack _hack({int stepCount = 3}) => Hack(
           'real height, the way the live payload does.',
     ),
   ),
-  cards: const ['ixigo AU Credit Card'],
+  // Catalog card ids, matched against CreditCard.catalogCardId.
+  cardIds: const ['cat-1'],
   // A URL is required for the hero to render an Image at all. The request
   // fails under flutter_test, which is the realistic case anyway: the
   // errorBuilder runs and the placeholder shows through.
@@ -45,16 +48,21 @@ Future<void> _pump(
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    MaterialApp(
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(
-          context,
-        ).copyWith(padding: EdgeInsets.only(top: topInset)),
-        child: child!,
-      ),
-      onGenerateRoute: (settings) => MaterialPageRoute(
-        builder: (_) => const HackDetailScreen(),
-        settings: RouteSettings(arguments: _hack(stepCount: stepCount)),
+    // The screen names which of the reader's own cards a benefit works
+    // with, so it reads AuthState.
+    ChangeNotifierProvider(
+      create: (_) => AuthState(),
+      child: MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(padding: EdgeInsets.only(top: topInset)),
+          child: child!,
+        ),
+        onGenerateRoute: (settings) => MaterialPageRoute(
+          builder: (_) => const HackDetailScreen(),
+          settings: RouteSettings(arguments: _hack(stepCount: stepCount)),
+        ),
       ),
     ),
   );
