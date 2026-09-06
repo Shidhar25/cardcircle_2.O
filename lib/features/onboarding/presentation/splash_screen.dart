@@ -238,17 +238,29 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 30),
-                _Wordmark(
-                  cardProgress: _wordCard.value,
-                  circleProgress: _wordCircle.value,
-                  // CSS cursor blinks until `fade .1s 3.1s reverse forwards`
-                  // hides it at 3.2s, not merely until typing finishes.
-                  showCursor:
-                      _controller.value < (3.2 / 4.3) &&
-                      _cursorController.value > 0.5,
+                // Scaled to fit rather than fixed: 42pt is wide on a small
+                // phone, and the wordmark renders in a fallback face until
+                // Inter has been fetched — which is wider still, and is
+                // exactly the state a first launch is in.
+                _FitWidth(
+                  child: _Wordmark(
+                    cardProgress: _wordCard.value,
+                    circleProgress: _wordCircle.value,
+                    // CSS cursor blinks until `fade .1s 3.1s reverse forwards`
+                    // hides it at 3.2s, not merely until typing finishes.
+                    showCursor:
+                        _controller.value < (3.2 / 4.3) &&
+                        _cursorController.value > 0.5,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                _Tagline(p1: _tag1.value, p2: _tag2.value, p3: _tag3.value),
+                _FitWidth(
+                  child: _Tagline(
+                    p1: _tag1.value,
+                    p2: _tag2.value,
+                    p3: _tag3.value,
+                  ),
+                ),
                 const SizedBox(height: 66),
                 Container(
                   width: 112,
@@ -278,6 +290,25 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
+}
+
+/// Shrinks its child to fit the screen width, never enlarging it.
+///
+/// The splash is the first frame the app ever draws, so it renders before
+/// any webfont has been fetched — in a fallback face that is wider than the
+/// one the layout was designed against. Combined with a 320pt phone that is
+/// enough to overflow. Scaling down is the honest fix: the mark keeps its
+/// proportions and simply gets smaller.
+class _FitWidth extends StatelessWidget {
+  final Widget child;
+
+  const _FitWidth({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: FittedBox(fit: BoxFit.scaleDown, child: child),
+  );
 }
 
 /// The EMV chip's contact divisions.
@@ -552,9 +583,16 @@ class _SplashFigure extends StatelessWidget {
   Widget build(BuildContext context) {
     // Rises and scales in, matching the logo's staggered entrance.
     final eased = Curves.easeOutBack.transform(progress.clamp(0.0, 1.0));
-    final head = size * 0.46;
+
+    // The three parts must sum to exactly `size`: they sit in a fixed-height
+    // box, so fractions that add to more than 1.0 overflow it. They were
+    // 0.46 + 0.05 + 0.54 = 1.05, which overflowed by 1.8px at size 36 and
+    // 2.8px at 56. The body takes whatever is left rather than a fraction
+    // of its own, so no rounding can push the column past its bounds.
+    final head = size * 0.44;
+    final gap = size * 0.04;
+    final bodyH = size - head - gap;
     final bodyW = size * 0.86;
-    final bodyH = size * 0.54;
 
     return Opacity(
       opacity: progress.clamp(0.0, 1.0),
@@ -580,7 +618,7 @@ class _SplashFigure extends StatelessWidget {
                     ),
                   ),
                 ),
-                SizedBox(height: size * 0.05),
+                SizedBox(height: gap),
                 // Shoulders: a rounded cap, flat where it meets the base.
                 Container(
                   width: bodyW,
