@@ -6,7 +6,15 @@ import '../../../shared/models/models.dart';
 import '../../../shared/models/paged_result.dart';
 
 /// Which benefit list a request is for.
-enum HackFeed { mine, circle }
+enum HackFeed {
+  mine,
+  circle,
+
+  /// Server-side search results. Shares the paging machinery with the two
+  /// tab feeds, but its contents depend on the current query rather than on
+  /// which tab is open.
+  search,
+}
 
 /// One infinitely-scrolling list: the items loaded so far plus where the
 /// paging has got to.
@@ -68,13 +76,29 @@ class _Feed {
 class FeedState extends ChangeNotifier {
   final _Feed _mine = _Feed();
   final _Feed _circle = _Feed();
+  final _Feed _search = _Feed();
+
+  /// The active free-text query, or empty.
+  String _query = '';
+  String get query => _query;
+
+  /// The active category name, or null.
+  String? _category;
+  String? get category => _category;
+
+  /// Whether the reader is searching rather than browsing a tab.
+  bool get isSearching => _query.isNotEmpty || _category != null;
 
   FeedState() {
     loadFirstPage(HackFeed.mine);
     loadFirstPage(HackFeed.circle);
   }
 
-  _Feed _feedFor(HackFeed which) => which == HackFeed.mine ? _mine : _circle;
+  _Feed _feedFor(HackFeed which) => switch (which) {
+    HackFeed.mine => _mine,
+    HackFeed.circle => _circle,
+    HackFeed.search => _search,
+  };
 
   List<Hack> get myHacks => List.unmodifiable(_mine.items);
   List<Hack> get circleHacks => List.unmodifiable(_circle.items);
@@ -171,13 +195,59 @@ class FeedState extends ChangeNotifier {
   Future<void> refreshAll() =>
       Future.wait([refresh(HackFeed.mine), refresh(HackFeed.circle)]);
 
+  /// Sets the search terms and loads the first page of results.
+  ///
+  /// A free-text query wins over a selected category: the server's text
+  /// search already covers category names, so running both would mean
+  /// choosing one endpoint anyway — and the typed query is the more
+  /// specific intent.
+  ///
+  /// Clearing both drops back to the tab feeds without refetching them,
+  /// since their pages are still held.
+  Future<void> setSearch({String query = '', String? category}) async {
+    final trimmed = query.trim();
+    if (trimmed == _query && category == _category) return;
+
+    _query = trimmed;
+    _category = category;
+    _search.reset();
+
+    if (!isSearching) {
+      notifyListeners();
+      return;
+    }
+    await loadFirstPage(HackFeed.search, force: true);
+  }
+
   Future<PagedResult<Map<String, dynamic>>?> _request(
     HackFeed which,
     int page,
   ) {
-    return which == HackFeed.mine
-        ? ApiService.getMyHacks(page: page)
-        : ApiService.getCircleHacks(page: page);
+    switch (which) {
+      case HackFeed.mine:
+        return ApiService.getMyHacks(page: page);
+      case HackFeed.circle:
+        return ApiService.getCircleHacks(page: page);
+      case HackFeed.search:
+        if (_query.isNotEmpty) {
+          return ApiService.searchHacks(_query, page: page);
+        }
+        final category = _category;
+        if (category != null) {
+          return ApiService.searchHacksByCategory(category, page: page);
+        }
+        // Nothing to search for; an empty page ends the scroll cleanly
+        // rather than firing a request with no terms.
+        return Future.value(
+          const PagedResult<Map<String, dynamic>>(
+            items: [],
+            page: 1,
+            limit: 0,
+            total: 0,
+            hasMore: false,
+          ),
+        );
+    }
   }
 
   /// Swaps a benefit for an updated copy, keeping both lists in step.
@@ -187,7 +257,7 @@ class FeedState extends ChangeNotifier {
   /// back.
   void replaceHack(Hack updated) {
     var changed = false;
-    for (final list in [_mine.items, _circle.items]) {
+    for (final list in [_mine.items, _circle.items, _search.items]) {
       final i = list.indexWhere((h) => h.id == updated.id);
       if (i != -1) {
         list[i] = updated;
@@ -199,7 +269,7 @@ class FeedState extends ChangeNotifier {
 
   void likeHack(String id) {
     LoggerService.debug('Toggling like for hack ID: $id');
-    for (final list in [_mine.items, _circle.items]) {
+    for (final list in [_mine.items, _circle.items, _search.items]) {
       for (final h in list) {
         if (h.id == id) {
           h.liked = !h.liked;

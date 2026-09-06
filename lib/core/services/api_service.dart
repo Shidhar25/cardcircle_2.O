@@ -1108,6 +1108,39 @@ class ApiService {
     int limit = defaultPageSize,
   }) => _fetchHackPage('getmyhacks', page: page, limit: limit);
 
+  /// Free-text search across the benefit catalog
+  /// (`GET /hacks/search?q=`).
+  ///
+  /// The matching is fuzzy server-side, so typos still find the benefit.
+  /// Same page envelope as the other lists, so the infinite scroll works
+  /// unchanged.
+  static Future<PagedResult<Map<String, dynamic>>?> searchHacks(
+    String query, {
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage(
+    'search',
+    page: page,
+    limit: limit,
+    extraQuery: {'q': query},
+  );
+
+  /// Benefits in one category (`GET /hacks/search/category?category=`).
+  ///
+  /// Exact and case-insensitive, unlike [searchHacks] — a category pill is
+  /// a precise choice, so fuzzy matching there would surface benefits the
+  /// reader did not ask for.
+  static Future<PagedResult<Map<String, dynamic>>?> searchHacksByCategory(
+    String category, {
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage(
+    'search/category',
+    page: page,
+    limit: limit,
+    extraQuery: {'category': category},
+  );
+
   /// One page of benefits shared by people you follow.
   static Future<PagedResult<Map<String, dynamic>>?> getCircleHacks({
     int page = 1,
@@ -1122,11 +1155,17 @@ class ApiService {
     String path, {
     required int page,
     required int limit,
+    Map<String, String> extraQuery = const {},
   }) async {
     try {
       LoggerService.info('Fetching $path page $page...');
+      final query = <String, String>{
+        'page': '$page',
+        'limit': '$limit',
+        ...extraQuery,
+      };
       final response = await http.get(
-        Uri.parse('$baseUrl/hacks/$path?page=$page&limit=$limit'),
+        Uri.parse('$baseUrl/hacks/$path').replace(queryParameters: query),
         headers: _headers(requireAuth: true),
       );
       final body = jsonDecode(response.body);
