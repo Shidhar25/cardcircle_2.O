@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
+import '../../shared/models/feedback_question.dart';
 import '../../shared/models/paged_result.dart';
 import 'local_storage_service.dart';
 import 'logger_service.dart';
@@ -836,6 +837,67 @@ class ApiService {
       return ApiResult.fromResponse(response, action: 'Reject request');
     } catch (e, stack) {
       LoggerService.error('Error rejecting follow request', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Asks whether this user should be prompted for feedback in [context]
+  /// (`GET /feedback/{context}/prompt`).
+  ///
+  /// The server owns "once per user per context", so the app never has to
+  /// track whether it has asked before — it just asks at the triggering
+  /// moment and shows nothing when told not to.
+  static Future<FeedbackPrompt> getFeedbackPrompt(String context) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/feedback/$context/prompt'),
+        headers: _headers(requireAuth: true),
+      );
+      final result = ApiResult.fromResponse(
+        response,
+        action: 'Feedback prompt',
+      );
+      if (!result.ok) return FeedbackPrompt.none;
+      return FeedbackPrompt.parse(result.data);
+    } catch (e, stack) {
+      // Feedback is never worth interrupting the screen for: on any failure
+      // the prompt simply does not appear.
+      LoggerService.error('Error fetching feedback prompt', e, stack);
+      return FeedbackPrompt.none;
+    }
+  }
+
+  /// Submits answers for [context] (`POST /feedback/{context}/responses`).
+  ///
+  /// [answers] maps question id to the answer string the API expects:
+  /// `"yes"`/`"no"` for a yes/no question, `"1"`..`"5"` for a rating.
+  ///
+  /// Send every question at once. A question can only be answered once —
+  /// a second attempt is rejected — so a partial submission permanently
+  /// loses the chance to answer the rest.
+  static Future<ApiResult<Map<String, dynamic>>> submitFeedback({
+    required String context,
+    required Map<String, String> answers,
+    String? hackId,
+  }) async {
+    try {
+      LoggerService.info('Submitting ${answers.length} feedback answers.');
+      final response = await http.post(
+        Uri.parse('$baseUrl/feedback/$context/responses'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({
+          if (hackId != null && hackId.isNotEmpty) 'hack_id': hackId,
+          'answers': [
+            for (final e in answers.entries)
+              {'question_id': e.key, 'answer': e.value},
+          ],
+        }),
+      );
+      return ApiResult.fromResponse(response, action: 'Submit feedback');
+    } catch (e, stack) {
+      LoggerService.error('Error submitting feedback', e, stack);
       return const ApiResult.failure(
         'Could not reach the server. Check your connection.',
       );

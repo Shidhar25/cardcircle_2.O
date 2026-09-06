@@ -11,6 +11,7 @@ import '../../../shared/models/hack_rating.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/primitives.dart';
 import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/feedback_sheet.dart';
 import '../../../shared/widgets/rating_stars.dart';
 
 /// v1 screen 22 — Benefit detail: a full-bleed hero image, the benefit's
@@ -49,6 +50,47 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
   /// making the reader leave and come back to see their own score land.
   Hack? _updated;
   bool _rating = false;
+
+  /// Guards the one-time feedback prompt against being asked twice in a
+  /// session — `didChangeDependencies` can run more than once, and the
+  /// server's "already answered" only takes effect after a submission.
+  bool _feedbackChecked = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_feedbackChecked) return;
+    _feedbackChecked = true;
+
+    final hack = ModalRoute.of(context)?.settings.arguments as Hack?;
+    if (hack != null) _maybeAskForFeedback(hack);
+  }
+
+  /// Asks the server whether this reader owes feedback for opening a
+  /// benefit, and prompts if so.
+  ///
+  /// Deliberately after the first frame and never blocking: the reader came
+  /// here to read a benefit, so the screen must be up and usable before
+  /// anything interrupts it. Any failure is silent — a feedback prompt is
+  /// never worth an error message over.
+  Future<void> _maybeAskForFeedback(Hack hack) async {
+    final prompt = await ApiService.getFeedbackPrompt(_feedbackContext);
+    if (!mounted || !prompt.hasSomethingToAsk) return;
+
+    // The reader may have moved on while the request was in flight.
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    if (!mounted) return;
+
+    await FeedbackSheet.show(
+      context,
+      feedbackContext: _feedbackContext,
+      questions: prompt.questions,
+      hackId: hack.id,
+    );
+  }
+
+  /// Matches the seeded context on the server.
+  static const String _feedbackContext = 'hack_benefits_first_view';
 
   Future<void> _submitRating(Hack hack, int stars) async {
     if (_rating) return;
