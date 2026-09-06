@@ -50,6 +50,7 @@ dependencies:
   url_launcher: ^6.3.1
 
 dev_dependencies:
+  flutter_launcher_icons: ^0.14.4
   flutter_test:
     sdk: flutter
 
@@ -73,6 +74,7 @@ flutter:
 
   # To add assets to your application, add an assets section, like this:
   assets:
+    - assets/brand/
     - assets/icons/
     - assets/fonts/
   # Card artwork, bank logos and network logos are served by the backend
@@ -88,3 +90,17 @@ flutter:
 
   # UI text uses Inter + JetBrains Mono via google_fonts (see
   # lib/core/theme/app_theme.dart AppText) — no bundled font assets needed.
+
+# App icon, generated from the brand emblem with:
+#   dart run flutter_launcher_icons
+# The emblem alone is used, not the full lockup — a wordmark is illegible
+# at 48px and the launcher grid is where this is seen.
+flutter_launcher_icons:
+  image_path: assets/brand/app_icon.png
+  android: true
+  ios: true
+  remove_alpha_ios: true
+  # Adaptive icons are masked and cropped ~33%, so the emblem sits inside
+  # its own safe zone on a black plate matching the brand background.
+  adaptive_icon_background: "#000000"
+  adaptive_icon_foreground: assets/brand/app_icon_foreground.png
