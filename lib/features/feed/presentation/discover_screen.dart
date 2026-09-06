@@ -1,15 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../core/config/remote_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../state/feed_state.dart';
+import '../../auth/state/auth_state.dart';
 import '../../profile/state/category_state.dart';
 import '../../../shared/models/spend_category.dart';
 import '../../../shared/models/hack.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/meta_chip.dart';
 import '../../../shared/widgets/primitives.dart';
+import '../../../shared/widgets/rating_stars.dart';
 
 /// v1 screen 21 — Benefits: search bar, MY BENEFITS / CIRCLE BENEFITS
 /// segmented tabs, a horizontal category pill row, and a vertical feed.
@@ -38,7 +41,22 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   final ScrollController _scrollController = ScrollController();
   String _query = '';
 
-  HackFeed get _feed => _tabIndex == 0 ? HackFeed.mine : HackFeed.circle;
+  /// Which feed the list is showing.
+  ///
+  /// Searching replaces the tab feed rather than filtering it: the server
+  /// searches the whole catalog, so results are no longer limited to the
+  /// pages this screen happens to have loaded.
+  HackFeed get _feed {
+    if (_searching) return HackFeed.search;
+    return _tabIndex == 0 ? HackFeed.mine : HackFeed.circle;
+  }
+
+  bool _searching = false;
+
+  /// Keystrokes are cheap; requests are not. Waiting for a pause means one
+  /// search per word typed rather than one per letter.
+  Timer? _debounce;
+  static const Duration _debounceDelay = Duration(milliseconds: 350);
 
   /// How far from the bottom to start fetching the next page. Roughly two
   /// rows, so the next batch is usually in place before the user reaches
@@ -48,13 +66,68 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   void initState() {
     super.initState();
-    _searchController.addListener(() {
-      setState(() => _query = _searchController.text.toLowerCase().trim());
-    });
+    _searchController.addListener(_onQueryChanged);
     _scrollController.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) context.read<CategoryState>().loadAll();
     });
+  }
+
+  void _onQueryChanged() {
+    final next = _searchController.text.trim();
+    if (next == _query) return;
+    setState(() => _query = next);
+
+    _debounce?.cancel();
+    _debounce = Timer(_debounceDelay, _runSearch);
+  }
+
+  /// Pushes the current terms to the server.
+  ///
+  /// Typing wins over a selected category — the server's text search covers
+  /// category names anyway — so a query clears the pill to keep the screen
+  /// honest about what is being searched.
+  Future<void> _runSearch() async {
+    if (!mounted) return;
+    final feedState = context.read<FeedState>();
+
+    if (_query.isNotEmpty && _category != null) {
+      setState(() => _category = null);
+    }
+
+    final searching = _query.isNotEmpty || _category != null;
+    setState(() => _searching = searching);
+
+    await feedState.setSearch(query: _query, category: _category?.displayName);
+
+    if (mounted && _scrollController.hasClients) {
+      _scrollController.jumpTo(0);
+    }
+  }
+
+  /// Copy for an empty list, which means different things when browsing
+  /// and when searching.
+  String _emptyMessage() {
+    if (_query.isNotEmpty) return 'Nothing matches "$_query".';
+    final category = _category;
+    if (category != null) {
+      return 'No benefits in ${category.displayName} yet.';
+    }
+    return _tabIndex == 0
+        ? 'No benefits for your cards yet.'
+        : 'Nobody in your circle has shared a benefit yet.';
+  }
+
+  void _selectCategory(SpendCategory? category) {
+    setState(() {
+      _category = category;
+      if (category != null && _query.isNotEmpty) {
+        _query = '';
+        _searchController.clear();
+      }
+    });
+    _debounce?.cancel();
+    _runSearch();
   }
 
   void _onScroll() {
@@ -67,48 +140,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     }
   }
 
-  /// Keeps paging while a filter hides everything that has loaded.
-  ///
-  /// Filtering happens on the client, so a page of seven can contain no
-  /// match and leave the user staring at "nothing here" while twenty more
-  /// benefits sit unfetched on the server. Rather than claiming the list is
-  /// empty, this walks forward a page at a time until something matches or
-  /// the feed runs out.
-  void _continueSearchIfNeeded(FeedState feedState, int visibleCount) {
-    final filtering = _query.isNotEmpty || _category != null;
-    if (!filtering || visibleCount > 0) return;
-    if (!feedState.hasMore(_feed)) return;
-    if (feedState.isLoadingMore(_feed) || feedState.isLoadingFirstPage(_feed)) {
-      return;
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<FeedState>().loadNextPage(_feed);
-    });
-  }
-
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     _scrollController
       ..removeListener(_onScroll)
       ..dispose();
     super.dispose();
-  }
-
-  List<Hack> _filter(List<Hack> source) {
-    final selected = _category;
-    return source.where((h) {
-      // A benefit may name its category by machine name or display label,
-      // so matching is delegated to the category itself rather than done
-      // with a string equality that only one of those spellings passes.
-      final matchesCat = selected == null || selected.matches(h.category);
-      final matchesQuery =
-          _query.isEmpty ||
-          h.title.toLowerCase().contains(_query) ||
-          h.cardName.toLowerCase().contains(_query) ||
-          h.category.toLowerCase().contains(_query);
-      return matchesCat && matchesQuery;
-    }).toList();
   }
 
   @override
@@ -117,13 +156,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     final categories = categoryState.all;
     final feedState = Provider.of<FeedState>(context);
     final feed = _feed;
-    final hacks = _filter(feedState.itemsOf(feed));
+    final hacks = feedState.itemsOf(feed);
     final loading = feedState.isLoadingFirstPage(feed);
     final loadingMore = feedState.isLoadingMore(feed);
     final hasMore = feedState.hasMore(feed);
     final error = feedState.errorOf(feed);
-
-    _continueSearchIfNeeded(feedState, hacks.length);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -194,6 +231,18 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         selectedIndex: _tabIndex,
                         onChanged: (i) {
                           setState(() => _tabIndex = i);
+                          // Switching tabs is a request to browse, so it
+                          // ends the search rather than silently showing
+                          // results that ignore the tab.
+                          if (_searching) {
+                            _searchController.clear();
+                            setState(() {
+                              _query = '';
+                              _category = null;
+                              _searching = false;
+                            });
+                            feedState.setSearch();
+                          }
                           // Each tab keeps its own paging, so the newly
                           // shown one may still need its first page.
                           feedState.loadFirstPage(
@@ -223,14 +272,14 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               return FilterPill(
                                 label: 'All',
                                 selected: _category == null,
-                                onTap: () => setState(() => _category = null),
+                                onTap: () => _selectCategory(null),
                               );
                             }
                             final c = categories[index - 1];
                             return FilterPill(
                               label: c.displayName,
                               selected: _category?.id == c.id,
-                              onTap: () => setState(() => _category = c),
+                              onTap: () => _selectCategory(c),
                             );
                           },
                         ),
@@ -259,34 +308,20 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 56),
                               child: Column(
                                 children: [
-                                  if (loadingMore) ...[
-                                    const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        color: AppColors.gold,
-                                        strokeWidth: 2,
-                                      ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.md),
-                                    Text(
-                                      'Looking through more benefits…',
-                                      style: AppText.sans(
-                                        13,
-                                        color: AppColors.textFaint,
-                                      ),
-                                    ),
-                                  ] else ...[
+                                  ...[
                                     const Icon(
                                       PhosphorIconsRegular.magnifyingGlass,
                                       size: 30,
                                       color: AppColors.textGhost,
                                     ),
                                     const SizedBox(height: AppSpacing.md),
+                                    // Naming the search back to the reader
+                                    // matters: the server searches the whole
+                                    // catalog, so an empty result means the
+                                    // term found nothing — not that this
+                                    // screen has yet to load enough pages.
                                     Text(
-                                      error ??
-                                          'Nothing here yet. Try another '
-                                              'category.',
+                                      error ?? _emptyMessage(),
                                       textAlign: TextAlign.center,
                                       style: AppText.sans(
                                         13,
@@ -449,6 +484,10 @@ class _HackRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final myCardNames = hack.myCardNames(
+      Provider.of<AuthState>(context, listen: false).user.cards,
+    );
+
     return OutlinedSurface(
       padding: EdgeInsets.zero,
       child: Column(
@@ -480,14 +519,14 @@ class _HackRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      MonoLabel(
-                        '${hack.authorLevel} · ${hack.timestamp}',
-                        size: 9,
-                        letterSpacing: 1.1,
-                        color: AppColors.textGhost,
-                        uppercase: true,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      // The rating, leading with the circle's score when
+                      // there is one. This line used to read
+                      // "VERIFIED · RECENTLY" — two hardcoded constants
+                      // identical on every row, telling the reader nothing.
+                      RatingBadge(
+                        rating: hack.headlineRating,
+                        fromCircle: hack.headlineIsCircle,
+                        size: 9.5,
                       ),
                     ],
                   ),
@@ -582,15 +621,19 @@ class _HackRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.xs),
-                      Flexible(
-                        child: MetaChip(
-                          icon: PhosphorIconsRegular.creditCard,
-                          iconColor: AppColors.gold,
-                          background: AppColors.elevated,
-                          label: hack.cardName,
-                          labelColor: const Color(0xFFB2B6CA),
+                      // Which of the reader's own cards this works with.
+                      // Hidden entirely when none match, rather than
+                      // claiming "All Credit Cards" as it used to.
+                      if (myCardNames.isNotEmpty)
+                        Flexible(
+                          child: MetaChip(
+                            icon: PhosphorIconsRegular.creditCard,
+                            iconColor: AppColors.gold,
+                            background: AppColors.elevated,
+                            label: myCardNames.join(', '),
+                            labelColor: const Color(0xFFB2B6CA),
+                          ),
                         ),
-                      ),
                     ],
                   ),
                 ),

@@ -118,4 +118,38 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+
+  group('a user with no contacts still has a way in', () {
+    // With nothing synced there is nobody to invite by name. Without a
+    // generic link the Contacts tab is a dead end: no rows, no action, and
+    // the whole social side of the app unreachable.
+    testWidgets('the Contacts tab offers a shareable invite link', (
+      tester,
+    ) async {
+      await _pump(tester, const Size(390, 800));
+      await tester.tap(find.text('Contacts'));
+      await tester.pump();
+
+      expect(find.text('Share invite link'), findsOneWidget);
+    });
+
+    testWidgets('the empty copy points at the link rather than dead-ending', (
+      tester,
+    ) async {
+      await _pump(tester, const Size(390, 800));
+      await tester.tap(find.text('Contacts'));
+      await tester.pump();
+
+      expect(find.textContaining('invite link'), findsWidgets);
+    });
+
+    testWidgets('the empty state does not overflow a small phone', (
+      tester,
+    ) async {
+      await _pump(tester, const Size(320, 640));
+      await tester.tap(find.text('Contacts'));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+  });
 }

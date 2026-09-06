@@ -179,6 +179,7 @@ class AuthState extends ChangeNotifier {
         fetchedCards.add(
           CreditCard(
             id: userCardId.isNotEmpty ? userCardId : cardId,
+            catalogCardId: cardId,
             name: cardName,
             bank: brand.name.isNotEmpty ? brand.name : bankDisplayName,
             bankId: bankSlug,

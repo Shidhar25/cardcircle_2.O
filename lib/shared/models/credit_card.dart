@@ -1,7 +1,16 @@
 import 'package:flutter/material.dart';
 
 class CreditCard {
+  /// The saved-card id (`user_card_id`) — what delete and permission calls
+  /// address.
   final String id;
+
+  /// The catalog id (`card_id`) this saved card was created from.
+  ///
+  /// Separate from [id] because benefits list the cards they apply to by
+  /// catalog id; matching those against a `user_card_id` never succeeds.
+  final String catalogCardId;
+
   final String name;
   final String bank;
   final String lastFour;
@@ -37,6 +46,7 @@ class CreditCard {
 
   CreditCard({
     required this.id,
+    this.catalogCardId = '',
     required this.name,
     required this.bank,
     required this.lastFour,
@@ -54,6 +64,7 @@ class CreditCard {
 
   Map<String, dynamic> toJson() => {
     'id': id,
+    'catalogCardId': catalogCardId,
     'name': name,
     'bank': bank,
     'lastFour': lastFour,
@@ -71,6 +82,7 @@ class CreditCard {
 
   factory CreditCard.fromJson(Map<String, dynamic> json) => CreditCard(
     id: json['id'],
+    catalogCardId: json['catalogCardId'] as String? ?? '',
     name: json['name'],
     bank: json['bank'],
     lastFour: json['lastFour'],

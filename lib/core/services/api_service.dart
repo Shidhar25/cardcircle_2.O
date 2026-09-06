@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
+import '../../shared/models/feedback_question.dart';
 import '../../shared/models/paged_result.dart';
 import 'local_storage_service.dart';
 import 'logger_service.dart';
@@ -842,6 +843,133 @@ class ApiService {
     }
   }
 
+  /// Asks whether this user should be prompted for feedback in [context]
+  /// (`GET /feedback/{context}/prompt`).
+  ///
+  /// The server owns "once per user per context", so the app never has to
+  /// track whether it has asked before — it just asks at the triggering
+  /// moment and shows nothing when told not to.
+  /// [hackId] scopes the question to one benefit: feedback is tracked per
+  /// user *and* hack, so answering for one benefit must not silence the
+  /// prompt on every other.
+  ///
+  /// Prefer the `feedback_prompt` embedded on a [Hack] by the list
+  /// endpoints — this is the fallback for benefits reached without a list
+  /// fetch, such as a deep link.
+  static Future<FeedbackPrompt> getFeedbackPrompt(
+    String context, {
+    String? hackId,
+  }) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/feedback/$context/prompt').replace(
+          queryParameters: {
+            if (hackId != null && hackId.isNotEmpty) 'hack_id': hackId,
+          },
+        ),
+        headers: _headers(requireAuth: true),
+      );
+      final result = ApiResult.fromResponse(
+        response,
+        action: 'Feedback prompt',
+      );
+      if (!result.ok) return FeedbackPrompt.none;
+      return FeedbackPrompt.parse(result.data);
+    } catch (e, stack) {
+      // Feedback is never worth interrupting the screen for: on any failure
+      // the prompt simply does not appear.
+      LoggerService.error('Error fetching feedback prompt', e, stack);
+      return FeedbackPrompt.none;
+    }
+  }
+
+  /// Submits answers for [context] (`POST /feedback/{context}/responses`).
+  ///
+  /// [answers] maps question id to the answer string the API expects:
+  /// `"yes"`/`"no"` for a yes/no question, `"1"`..`"5"` for a rating.
+  ///
+  /// Send every question at once. A question can only be answered once —
+  /// a second attempt is rejected — so a partial submission permanently
+  /// loses the chance to answer the rest.
+  static Future<ApiResult<Map<String, dynamic>>> submitFeedback({
+    required String context,
+    required Map<String, String> answers,
+    String? hackId,
+  }) async {
+    try {
+      LoggerService.info('Submitting ${answers.length} feedback answers.');
+      final response = await http.post(
+        Uri.parse('$baseUrl/feedback/$context/responses'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({
+          if (hackId != null && hackId.isNotEmpty) 'hack_id': hackId,
+          'answers': [
+            for (final e in answers.entries)
+              {'question_id': e.key, 'answer': e.value},
+          ],
+        }),
+      );
+      return ApiResult.fromResponse(response, action: 'Submit feedback');
+    } catch (e, stack) {
+      LoggerService.error('Error submitting feedback', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Submits or updates this user's 1-5 rating for a benefit
+  /// (`POST /hacks/{hackId}/rate`).
+  ///
+  /// The response carries both refreshed aggregates plus the user's own
+  /// score, so the caller can update the row without re-fetching the list.
+  static Future<ApiResult<Map<String, dynamic>>> rateHack(
+    String hackId,
+    int rating,
+  ) async {
+    try {
+      LoggerService.info('Rating hack $hackId: $rating');
+      final response = await http.post(
+        Uri.parse('$baseUrl/hacks/$hackId/rate'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({'rating': rating}),
+      );
+      return ApiResult.fromResponse(response, action: 'Rate benefit');
+    } catch (e, stack) {
+      LoggerService.error('Error rating hack $hackId', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Creates a shareable, one-time invite link (`POST /invites`).
+  ///
+  /// Unlike the per-contact invite this addresses nobody: the response's
+  /// `whatsapp_url` has no recipient number, so the user picks who to send
+  /// it to. That is the point — it is the route in for someone whose
+  /// contacts are not synced, or who has nobody matched to invite.
+  ///
+  /// The link carries the creator's identity, so redeeming it opens a
+  /// follow request back to them. It expires in 24 hours and is consumed on
+  /// first redemption, so a fresh one is created per share rather than
+  /// cached.
+  static Future<ApiResult<Map<String, dynamic>>> createInviteLink() async {
+    try {
+      LoggerService.info('Creating invite link...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/invites'),
+        headers: _headers(requireAuth: true),
+      );
+      return ApiResult.fromResponse(response, action: 'Create invite link');
+    } catch (e, stack) {
+      LoggerService.error('Error creating invite link', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
   /// Invites an address-book contact who is not on CardCircle yet
   /// (`POST /user/contacts/{contactId}/invite`).
   ///
@@ -994,6 +1122,39 @@ class ApiService {
     int limit = defaultPageSize,
   }) => _fetchHackPage('getmyhacks', page: page, limit: limit);
 
+  /// Free-text search across the benefit catalog
+  /// (`GET /hacks/search?q=`).
+  ///
+  /// The matching is fuzzy server-side, so typos still find the benefit.
+  /// Same page envelope as the other lists, so the infinite scroll works
+  /// unchanged.
+  static Future<PagedResult<Map<String, dynamic>>?> searchHacks(
+    String query, {
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage(
+    'search',
+    page: page,
+    limit: limit,
+    extraQuery: {'q': query},
+  );
+
+  /// Benefits in one category (`GET /hacks/search/category?category=`).
+  ///
+  /// Exact and case-insensitive, unlike [searchHacks] — a category pill is
+  /// a precise choice, so fuzzy matching there would surface benefits the
+  /// reader did not ask for.
+  static Future<PagedResult<Map<String, dynamic>>?> searchHacksByCategory(
+    String category, {
+    int page = 1,
+    int limit = defaultPageSize,
+  }) => _fetchHackPage(
+    'search/category',
+    page: page,
+    limit: limit,
+    extraQuery: {'category': category},
+  );
+
   /// One page of benefits shared by people you follow.
   static Future<PagedResult<Map<String, dynamic>>?> getCircleHacks({
     int page = 1,
@@ -1008,11 +1169,17 @@ class ApiService {
     String path, {
     required int page,
     required int limit,
+    Map<String, String> extraQuery = const {},
   }) async {
     try {
       LoggerService.info('Fetching $path page $page...');
+      final query = <String, String>{
+        'page': '$page',
+        'limit': '$limit',
+        ...extraQuery,
+      };
       final response = await http.get(
-        Uri.parse('$baseUrl/hacks/$path?page=$page&limit=$limit'),
+        Uri.parse('$baseUrl/hacks/$path').replace(queryParameters: query),
         headers: _headers(requireAuth: true),
       );
       final body = jsonDecode(response.body);
@@ -1067,6 +1234,21 @@ class ApiService {
   }
 
   // 33. Get Push Notifications
+  /// Marks one notification read (`POST /push/notifications/{id}/read`).
+  ///
+  /// Fire-and-forget: the row is already dimmed locally by the time this
+  /// returns, and a failure here is not worth interrupting the reader over.
+  static Future<void> markNotificationRead(String notificationId) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/push/notifications/$notificationId/read'),
+        headers: _headers(requireAuth: true),
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error marking notification read', e, stack);
+    }
+  }
+
   static Future<List<Map<String, dynamic>>?> getNotifications() async {
     try {
       LoggerService.info('Fetching push notifications...');

@@ -210,32 +210,26 @@ class _SplashScreenState extends State<SplashScreen>
                       if (_card.value > 0) _SplashCard(progress: _card.value),
                       // Three colored dots.
                       Positioned(
-                        bottom: 24,
+                        bottom: 58,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _SplashDot(
-                              size: 26,
+                            _SplashFigure(
+                              size: 36,
                               progress: _dot1.value,
-                              colors: const [AppColors.teal, Color(0xFF1F3B39)],
+                              color: _Brand.figurePurple,
                             ),
-                            const SizedBox(width: 10),
-                            _SplashDot(
-                              size: 32,
+                            const SizedBox(width: 1),
+                            _SplashFigure(
+                              size: 56,
                               progress: _dot2.value,
-                              colors: const [
-                                AppColors.goldLight,
-                                AppColors.goldDark,
-                              ],
+                              color: _Brand.figureGold,
                             ),
-                            const SizedBox(width: 10),
-                            _SplashDot(
-                              size: 26,
+                            const SizedBox(width: 1),
+                            _SplashFigure(
+                              size: 36,
                               progress: _dot3.value,
-                              colors: const [
-                                Color(0xFFB5ABFC),
-                                Color(0xFF423A6A),
-                              ],
+                              color: _Brand.figureTeal,
                             ),
                           ],
                         ),
@@ -244,17 +238,29 @@ class _SplashScreenState extends State<SplashScreen>
                   ),
                 ),
                 const SizedBox(height: 30),
-                _Wordmark(
-                  cardProgress: _wordCard.value,
-                  circleProgress: _wordCircle.value,
-                  // CSS cursor blinks until `fade .1s 3.1s reverse forwards`
-                  // hides it at 3.2s, not merely until typing finishes.
-                  showCursor:
-                      _controller.value < (3.2 / 4.3) &&
-                      _cursorController.value > 0.5,
+                // Scaled to fit rather than fixed: 42pt is wide on a small
+                // phone, and the wordmark renders in a fallback face until
+                // Inter has been fetched — which is wider still, and is
+                // exactly the state a first launch is in.
+                _FitWidth(
+                  child: _Wordmark(
+                    cardProgress: _wordCard.value,
+                    circleProgress: _wordCircle.value,
+                    // CSS cursor blinks until `fade .1s 3.1s reverse forwards`
+                    // hides it at 3.2s, not merely until typing finishes.
+                    showCursor:
+                        _controller.value < (3.2 / 4.3) &&
+                        _cursorController.value > 0.5,
+                  ),
                 ),
                 const SizedBox(height: 20),
-                _Tagline(p1: _tag1.value, p2: _tag2.value, p3: _tag3.value),
+                _FitWidth(
+                  child: _Tagline(
+                    p1: _tag1.value,
+                    p2: _tag2.value,
+                    p3: _tag3.value,
+                  ),
+                ),
                 const SizedBox(height: 66),
                 Container(
                   width: 112,
@@ -286,6 +292,132 @@ class _SplashScreenState extends State<SplashScreen>
   }
 }
 
+/// Shrinks its child to fit the screen width, never enlarging it.
+///
+/// The splash is the first frame the app ever draws, so it renders before
+/// any webfont has been fetched — in a fallback face that is wider than the
+/// one the layout was designed against. Combined with a 320pt phone that is
+/// enough to overflow. Scaling down is the honest fix: the mark keeps its
+/// proportions and simply gets smaller.
+class _FitWidth extends StatelessWidget {
+  final Widget child;
+
+  const _FitWidth({required this.child});
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: FittedBox(fit: BoxFit.scaleDown, child: child),
+  );
+}
+
+/// The EMV chip's contact divisions.
+class _ChipPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0x99241A05)
+      ..strokeWidth = 0.9;
+
+    // Two horizontal divisions and one vertical, the layout on a real
+    // module.
+    for (final f in [0.33, 0.67]) {
+      canvas.drawLine(
+        Offset(0, size.height * f),
+        Offset(size.width, size.height * f),
+        paint,
+      );
+    }
+    canvas.drawLine(
+      Offset(size.width * 0.5, 0),
+      Offset(size.width * 0.5, size.height),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// The contactless symbol: three arcs opening to the right.
+class _ContactlessPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..color = _Brand.gold;
+
+    // Struck from a centre off the left edge so each arc reads as a slice
+    // of the same set of rings.
+    final centre = Offset(-size.width * 0.30, size.height / 2);
+    for (var i = 0; i < 3; i++) {
+      final radius = size.width * (0.52 + i * 0.30);
+      paint.strokeWidth = size.width * 0.115;
+      canvas.drawArc(
+        Rect.fromCircle(center: centre, radius: radius),
+        -math.pi / 4.6,
+        math.pi / 2.3,
+        false,
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// The four-point sparkle over the C of "Circle".
+class _SparklePainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final cy = h / 2;
+
+    // Concave sides: each point tapers into the centre, which is what
+    // separates a sparkle from a plus sign.
+    final path = Path()
+      ..moveTo(cx, 0)
+      ..quadraticBezierTo(cx + w * 0.10, cy - h * 0.10, w, cy)
+      ..quadraticBezierTo(cx + w * 0.10, cy + h * 0.10, cx, h)
+      ..quadraticBezierTo(cx - w * 0.10, cy + h * 0.10, 0, cy)
+      ..quadraticBezierTo(cx - w * 0.10, cy - h * 0.10, cx, 0)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = const Color(0xFFF6DE9B));
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Colours sampled from the brand logo rather than guessed.
+///
+/// The app's own palette is gold-on-Nocturne; the mark carries a wider
+/// cyan-to-purple sweep that exists nowhere else, so it is kept local to the
+/// splash instead of being pushed into [AppColors] where it would invite use
+/// on ordinary chrome.
+class _Brand {
+  const _Brand._();
+
+  static const cyan = Color(0xFF2EE1FD);
+  static const blue = Color(0xFF3B7BF6);
+  static const purple = Color(0xFFA841FA);
+  static const gold = Color(0xFFE8C252);
+  static const goldDeep = Color(0xFFB8892E);
+
+  /// The three figures: a smaller purple and teal flanking a gold centre.
+  static const figurePurple = Color(0xFF7C3AED);
+  static const figureGold = Color(0xFFCEA550);
+  static const figureTeal = Color(0xFF1B93B4);
+
+  static const silver = Color(0xFFF2F3F7);
+  static const silverDim = Color(0xFFA9AEC2);
+}
+
 class _RingPainter extends CustomPainter {
   final double progress;
   _RingPainter({required this.progress});
@@ -296,11 +428,14 @@ class _RingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     const radius = 76.0;
     const strokeWidth = 15.0;
-    const startAngle = -100 * math.pi / 180;
+    // The mark is a "C": a gap at the top right, then the stroke running
+    // clockwise through gold at the bottom, purple up the left, and cyan
+    // across the top. Measured off the logo.
+    const startAngle = -20 * math.pi / 180;
     // CSS: stroke-dasharray 478, stroke-dashoffset 478 -> 92, so only
     // (478-92)/478 of the ring's circumference is ever drawn — not a full
     // circle.
-    const maxSweepFraction = (478.0 - 92.0) / 478.0;
+    const maxSweepFraction = 310.0 / 360.0;
     final sweep = 2 * math.pi * progress * maxSweepFraction;
 
     final rect = Rect.fromCircle(center: center, radius: radius);
@@ -309,9 +444,16 @@ class _RingPainter extends CustomPainter {
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round
       ..shader = const SweepGradient(
-        colors: [AppColors.goldLight, AppColors.gold, AppColors.teal],
-        stops: [0.0, 0.45, 1.0],
-        transform: GradientRotation(-100 * math.pi / 180),
+        colors: [
+          _Brand.gold,
+          _Brand.gold,
+          _Brand.purple,
+          _Brand.blue,
+          _Brand.cyan,
+          _Brand.cyan,
+        ],
+        stops: [0.0, 0.22, 0.52, 0.70, 0.86, 1.0],
+        transform: GradientRotation(-20 * math.pi / 180),
       ).createShader(rect);
 
     canvas.drawArc(rect, startAngle, sweep, false, paint);
@@ -351,26 +493,26 @@ class _SplashCard extends StatelessWidget {
     return Opacity(
       opacity: eased,
       child: Transform.translate(
-        offset: Offset(lerp(-58, 0), lerp(-64, -6)),
+        offset: Offset(lerp(-58, 1), lerp(-64, -14)),
         child: Transform.rotate(
           angle: lerp(-46, -11) * math.pi / 180,
           child: Transform.scale(
             scale: lerp(0.42, 1.0),
             child: Container(
-              width: 112,
-              height: 70,
+              width: 104,
+              height: 66,
               padding: const EdgeInsets.fromLTRB(11, 13, 9, 11),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(10),
+                // Near-black with a lit gold edge, as in the mark — not the
+                // grey plate the prototype used.
                 gradient: const LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
-                  colors: [AppColors.border, AppColors.background],
-                  stops: [0.0, 0.62],
+                  colors: [Color(0xFF23252C), Color(0xFF0C0D12)],
+                  stops: [0.0, 0.78],
                 ),
-                border: Border.all(
-                  color: AppColors.gold.withValues(alpha: 0.55),
-                ),
+                border: Border.all(color: _Brand.gold.withValues(alpha: 0.85)),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.6),
@@ -387,17 +529,26 @@ class _SplashCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(3),
                       gradient: const LinearGradient(
-                        colors: [AppColors.goldLight, Color(0xFFB28C34)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [_Brand.gold, _Brand.goldDeep],
                       ),
                     ),
+                    // The contact grid. Without it the chip is a gold
+                    // rectangle; the divisions are what make it read as a
+                    // chip at this size.
+                    child: CustomPaint(painter: _ChipPainter()),
                   ),
-                  const Positioned(
-                    right: 0,
-                    top: -2,
-                    child: Icon(
-                      Icons.wifi_rounded,
-                      size: 14,
-                      color: AppColors.gold,
+                  // Drawn rather than an icon glyph: the logo's symbol is
+                  // three concentric arcs opening right, which no Material
+                  // icon matches, and a font-backed icon is one more thing
+                  // that can fail to load.
+                  Positioned(
+                    right: 1,
+                    top: 1,
+                    child: CustomPaint(
+                      size: const Size(13, 16),
+                      painter: _ContactlessPainter(),
                     ),
                   ),
                   // Deliberately no card number here — CardCircle never
@@ -413,38 +564,80 @@ class _SplashCard extends StatelessWidget {
   }
 }
 
-class _SplashDot extends StatelessWidget {
+/// One of the three figures inside the ring: a head above a shoulder cap.
+///
+/// The logo draws people, not dots. A circle alone reads as a bullet; the
+/// shoulder is what makes the group legible at a glance.
+class _SplashFigure extends StatelessWidget {
   final double size;
   final double progress;
-  final List<Color> colors;
+  final Color color;
 
-  const _SplashDot({
+  const _SplashFigure({
     required this.size,
     required this.progress,
-    required this.colors,
+    required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    // CSS dotUp: 0% opacity 0 translateY(46px) scale(.3) -> 100% opacity 1
-    // translateY(0) scale(1).
-    final eased = Curves.easeOutCubic.transform(progress.clamp(0.0, 1.0));
+    // Rises and scales in, matching the logo's staggered entrance.
+    final eased = Curves.easeOutBack.transform(progress.clamp(0.0, 1.0));
+
+    // The three parts must sum to exactly `size`: they sit in a fixed-height
+    // box, so fractions that add to more than 1.0 overflow it. They were
+    // 0.46 + 0.05 + 0.54 = 1.05, which overflowed by 1.8px at size 36 and
+    // 2.8px at 56. The body takes whatever is left rather than a fraction
+    // of its own, so no rounding can push the column past its bounds.
+    final head = size * 0.44;
+    final gap = size * 0.04;
+    final bodyH = size - head - gap;
+    final bodyW = size * 0.86;
+
     return Opacity(
-      opacity: eased,
+      opacity: progress.clamp(0.0, 1.0),
       child: Transform.translate(
-        offset: Offset(0, (1 - eased) * 46),
+        offset: Offset(0, (1 - eased) * 34),
         child: Transform.scale(
-          scale: 0.3 + 0.7 * eased,
-          child: Container(
+          scale: 0.4 + 0.6 * eased,
+          child: SizedBox(
             width: size,
             height: size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: colors,
-              ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                Container(
+                  width: head,
+                  height: head,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Color.lerp(color, Colors.white, 0.34)!, color],
+                    ),
+                  ),
+                ),
+                SizedBox(height: gap),
+                // Shoulders: a rounded cap, flat where it meets the base.
+                Container(
+                  width: bodyW,
+                  height: bodyH,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(bodyW / 2),
+                    ),
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        Color.lerp(color, Colors.white, 0.22)!,
+                        Color.lerp(color, Colors.black, 0.22)!,
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -453,6 +646,11 @@ class _SplashDot extends StatelessWidget {
   }
 }
 
+/// "Card" in brushed silver, "Circle" in gold, with the sparkle that sits
+/// over the C in the logo.
+///
+/// Both halves are gradient-filled rather than flat, which is what makes
+/// the mark read as metal rather than as coloured text.
 class _Wordmark extends StatelessWidget {
   final double cardProgress;
   final double circleProgress;
@@ -463,6 +661,30 @@ class _Wordmark extends StatelessWidget {
     required this.circleProgress,
     required this.showCursor,
   });
+
+  static const _size = 42.0;
+
+  TextStyle get _style => AppText.sans(
+    _size,
+    weight: FontWeight.w500,
+    color: Colors.white,
+    letterSpacing: -1.4,
+  );
+
+  Widget _metal(String text, List<Color> colors) {
+    if (text.isEmpty) return const SizedBox.shrink();
+    // ShaderMask paints the gradient through the glyphs, so the fill
+    // follows the letterforms instead of sitting behind them.
+    return ShaderMask(
+      shaderCallback: (bounds) => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: colors,
+      ).createShader(bounds),
+      blendMode: BlendMode.srcIn,
+      child: Text(text, style: _style),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -479,37 +701,50 @@ class _Wordmark extends StatelessWidget {
 
     return Row(
       mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          firstShown,
-          style: AppText.sans(
-            40,
-            weight: FontWeight.w500,
-            color: AppColors.text,
-            letterSpacing: -1.2,
-          ),
-        ),
-        Text(
-          secondShown,
-          style: AppText.sans(
-            40,
-            weight: FontWeight.w500,
-            color: AppColors.gold,
-            letterSpacing: -1.2,
-          ),
+        _metal(firstShown, const [
+          _Brand.silver,
+          Colors.white,
+          _Brand.silverDim,
+        ]),
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            _metal(secondShown, const [
+              _Brand.gold,
+              Color(0xFFF6DE9B),
+              _Brand.goldDeep,
+            ]),
+            // The four-point sparkle above the C, revealed with it.
+            if (secondShown.isNotEmpty)
+              Positioned(
+                left: _size * 0.52,
+                top: -_size * 0.06,
+                child: Opacity(
+                  opacity: circleProgress.clamp(0.0, 1.0),
+                  child: CustomPaint(
+                    size: const Size(13, 13),
+                    painter: _SparklePainter(),
+                  ),
+                ),
+              ),
+          ],
         ),
         if (showCursor)
           Container(
             width: 2,
-            height: 34,
+            height: _size * 0.82,
             color: AppColors.text,
-            margin: const EdgeInsets.only(left: 3),
+            margin: const EdgeInsets.only(left: 3, top: 4),
           ),
       ],
     );
   }
 }
 
+/// The logo's three-line tagline, with the last line split between the
+/// blue-to-purple "THEY'RE IN YOUR" and the gold "FRIEND CIRCLE."
 class _Tagline extends StatelessWidget {
   final double p1;
   final double p2;
@@ -519,44 +754,44 @@ class _Tagline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget line(double p, Widget child) {
-      return Opacity(
-        opacity: p.clamp(0.0, 1.0),
-        child: Transform.translate(
-          offset: Offset(0, (1 - p.clamp(0.0, 1.0)) * 8),
-          child: child,
-        ),
-      );
-    }
+    Widget line(double p, Widget child) => Opacity(
+      opacity: p.clamp(0.0, 1.0),
+      child: Transform.translate(
+        offset: Offset(0, (1 - p.clamp(0.0, 1.0)) * 8),
+        child: child,
+      ),
+    );
 
     final style = AppText.mono(
       10.5,
-      ls: 1.7,
+      ls: 2.4,
       c: AppColors.textDim,
-      w: FontWeight.w400,
+      w: FontWeight.w500,
     );
 
     return Column(
       children: [
-        line(p1, Text('THE BEST CARD HACKS', style: style)),
-        const SizedBox(height: 4),
+        line(p1, Text('THE BEST CREDIT CARD HACKS', style: style)),
+        const SizedBox(height: 5),
         line(p2, Text("AREN'T ON BLOGS.", style: style)),
-        const SizedBox(height: 4),
+        const SizedBox(height: 5),
         line(
           p3,
           Text.rich(
             TextSpan(
               style: style,
               children: [
-                const TextSpan(text: "THEY'RE IN "),
                 TextSpan(
-                  text: 'YOUR',
-                  style: style.copyWith(color: AppColors.teal),
+                  text: "THEY'RE IN ",
+                  style: style.copyWith(color: _Brand.blue),
                 ),
-                const TextSpan(text: ' '),
                 TextSpan(
-                  text: 'CIRCLE.',
-                  style: style.copyWith(color: AppColors.gold),
+                  text: 'YOUR ',
+                  style: style.copyWith(color: _Brand.purple),
+                ),
+                TextSpan(
+                  text: 'FRIEND CIRCLE.',
+                  style: style.copyWith(color: _Brand.gold),
                 ),
               ],
             ),

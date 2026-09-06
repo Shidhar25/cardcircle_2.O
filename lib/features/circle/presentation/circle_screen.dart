@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,6 +11,7 @@ import '../../../core/services/device_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../state/circle_state.dart';
 import '../../../shared/models/contact_action.dart';
+import '../../../shared/models/follow_back_status.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -564,9 +566,26 @@ class _CircleScreenState extends State<CircleScreen> {
                       if (inviteOnly.isEmpty)
                         Expanded(
                           child: Center(
-                            child: Text(
-                              'No contacts to invite',
-                              style: AppText.sans(14, color: AppColors.textDim),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Nobody here to invite by name yet.',
+                                  textAlign: TextAlign.center,
+                                  style: AppText.sans(
+                                    14,
+                                    color: AppColors.textDim,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                _InviteLinkButton(
+                                  busy: _creatingLink,
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    _handleShareInviteLink();
+                                  },
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -831,9 +850,13 @@ class _CircleScreenState extends State<CircleScreen> {
 
   // ---------------------------------------------------------------- lists
 
-  Widget _shell({required String caption, required List<Widget> children}) {
+  Widget _shell({
+    required String caption,
+    required List<Widget> children,
+    Widget? emptyAction,
+  }) {
     if (children.isEmpty) {
-      return _EmptyTab(message: caption);
+      return _EmptyTab(message: caption, action: emptyAction);
     }
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -909,6 +932,11 @@ class _CircleScreenState extends State<CircleScreen> {
             status: (rows[i]['status'] ?? '').toString(),
             permissionLine: _permissionLine(
               (rows[i]['follow_id'] ?? '').toString(),
+            ),
+            followBack: FollowBackStatus.parse(rows[i]['follow_back_status']),
+            onFollowBack: () => _handleToggleFollow(
+              (rows[i]['user_id'] ?? '').toString(),
+              (rows[i]['name'] ?? 'them').toString(),
             ),
             onEditAccess: () => _showCardAccessSheet(
               (rows[i]['follow_id'] ?? '').toString(),
@@ -1014,10 +1042,21 @@ class _CircleScreenState extends State<CircleScreen> {
           });
 
     return _shell(
+      // With nothing matched there is nobody to invite by name, so the
+      // empty state offers a link the user can send to anyone instead of
+      // being a dead end.
+      emptyAction: rows.isEmpty
+          ? _InviteLinkButton(
+              busy: _creatingLink,
+              onTap: _handleShareInviteLink,
+            )
+          : null,
       caption: rows.isEmpty
           ? (_showSyncPrompt
-                ? 'Sync your contacts to see who you already know here.'
-                : 'No contacts matched yet.')
+                ? 'Sync your contacts to find people you already know — or '
+                      'send someone an invite link.'
+                : 'No contacts matched yet. Send someone an invite link to '
+                      'get started.')
           : '${rows.where((f) => f.action.isMatchedUser).length} contacts matched',
       children: [
         for (var i = 0; i < rows.length; i++)
@@ -1051,6 +1090,59 @@ class _CircleScreenState extends State<CircleScreen> {
   /// Ids with an invite request in flight, so a double-tap cannot burn the
   /// contact's 24-hour cooldown on a second call.
   final Set<String> _invitingIds = {};
+
+  /// True while a shareable invite link is being created.
+  bool _creatingLink = false;
+
+  /// Creates a generic invite link and hands it to WhatsApp.
+  ///
+  /// This is the path for someone with no synced or matched contacts:
+  /// there is nobody to address, so the link addresses nobody and the user
+  /// chooses the recipient in WhatsApp. Each share mints a fresh link,
+  /// because the server consumes one on first redemption.
+  ///
+  /// If WhatsApp cannot be opened the raw link goes to the clipboard rather
+  /// than being lost — the user has already spent a round trip on it.
+  Future<void> _handleShareInviteLink() async {
+    if (_creatingLink) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _creatingLink = true);
+    final result = await ApiService.createInviteLink();
+    if (!mounted) return;
+    setState(() => _creatingLink = false);
+
+    if (!result.ok) {
+      messenger.showError(
+        result.display('Could not create an invite link right now.'),
+      );
+      return;
+    }
+
+    final data = result.data ?? const <String, dynamic>{};
+    final whatsapp = (data['whatsapp_url'] ?? '').toString();
+    final inviteUrl = (data['invite_url'] ?? '').toString();
+
+    final uri = whatsapp.isEmpty ? null : Uri.tryParse(whatsapp);
+    if (uri != null) {
+      try {
+        final opened = await launchUrl(
+          uri,
+          mode: LaunchMode.externalApplication,
+        );
+        if (opened) return;
+      } catch (e, stack) {
+        LoggerService.error('Failed to open invite link', e, stack);
+      }
+    }
+
+    if (inviteUrl.isNotEmpty) {
+      await Clipboard.setData(ClipboardData(text: inviteUrl));
+      messenger.showSuccess('Invite link copied — paste it anywhere.');
+    } else {
+      messenger.showError('Could not open WhatsApp.');
+    }
+  }
 
   /// Invites a contact who is not on CardCircle yet.
   ///
@@ -1464,7 +1556,13 @@ class _FollowerCard extends StatelessWidget {
   final String username;
   final String status;
   final String permissionLine;
+
+  /// Whether following them back is still open, already requested, or
+  /// already mutual.
+  final FollowBackStatus followBack;
+
   final VoidCallback onEditAccess;
+  final VoidCallback onFollowBack;
 
   const _FollowerCard({
     required this.initials,
@@ -1473,7 +1571,9 @@ class _FollowerCard extends StatelessWidget {
     required this.username,
     required this.status,
     required this.permissionLine,
+    required this.followBack,
     required this.onEditAccess,
+    required this.onFollowBack,
   });
 
   @override
@@ -1552,6 +1652,31 @@ class _FollowerCard extends StatelessWidget {
                 _SmallButton(label: 'Edit access', onTap: onEditAccess),
               ],
             ),
+            // Approving is one-directional: they can see the cards you
+            // shared, you still cannot see theirs. This is the route to
+            // even that up.
+            if (followBack == FollowBackStatus.open) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: _SmallButton(
+                  label: 'Follow back',
+                  primary: true,
+                  onTap: onFollowBack,
+                ),
+              ),
+            ] else if (followBack == FollowBackStatus.requested) ...[
+              const SizedBox(height: AppSpacing.sm),
+              Align(
+                alignment: Alignment.centerRight,
+                child: MonoLabel(
+                  'FOLLOW BACK REQUESTED',
+                  size: 8.5,
+                  letterSpacing: 1.1,
+                  color: AppColors.textFaint,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -1758,7 +1883,11 @@ class _InviteButton extends StatelessWidget {
 class _EmptyTab extends StatelessWidget {
   final String message;
 
-  const _EmptyTab({required this.message});
+  /// Optional way out of the empty state, so it reads as a next step rather
+  /// than a dead end.
+  final Widget? action;
+
+  const _EmptyTab({required this.message, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -1767,14 +1896,82 @@ class _EmptyTab extends StatelessWidget {
       physics: const AlwaysScrollableScrollPhysics(),
       children: [
         Padding(
-          padding: const EdgeInsets.symmetric(vertical: 64, horizontal: 24),
-          child: Text(
-            message,
-            textAlign: TextAlign.center,
-            style: AppText.sans(13, color: AppColors.textDim, height: 1.45),
+          padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+          child: Column(
+            children: [
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: AppText.sans(13, color: AppColors.textDim, height: 1.45),
+              ),
+              if (action != null) ...[
+                const SizedBox(height: AppSpacing.xl),
+                action!,
+              ],
+            ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Shares a link that invites anyone to join and follow back.
+class _InviteLinkButton extends StatelessWidget {
+  final bool busy;
+  final VoidCallback onTap;
+
+  const _InviteLinkButton({required this.busy, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: busy ? null : onTap,
+      child: Container(
+        height: 42,
+        alignment: Alignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AppRadii.pill),
+          color: AppColors.gold.withValues(alpha: 0.12),
+          border: Border.all(color: AppColors.gold),
+        ),
+        child: busy
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.8,
+                  color: AppColors.gold,
+                ),
+              )
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    PhosphorIconsRegular.shareNetwork,
+                    size: 15,
+                    color: AppColors.gold,
+                  ),
+                  const SizedBox(width: 8),
+                  // Flexible so the pill shrinks on a narrow phone instead
+                  // of pushing past its parent.
+                  Flexible(
+                    child: Text(
+                      'Share invite link',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      softWrap: false,
+                      style: AppText.sans(
+                        12.5,
+                        weight: FontWeight.w500,
+                        color: AppColors.gold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }

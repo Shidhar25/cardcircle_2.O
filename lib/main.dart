@@ -81,7 +81,12 @@ class CardCircleApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/verify-otp': (context) => const VerifyOTPScreen(),
         '/create-profile': (context) => const CreateProfileScreen(),
-        '/home': (context) => const TabsLayout(),
+        '/home': (context) {
+          // An int argument selects the starting tab; anything else lands
+          // on Home.
+          final arg = ModalRoute.of(context)?.settings.arguments;
+          return TabsLayout(initialIndex: arg is int ? arg : 0);
+        },
         '/edit-profile': (context) => const EditProfileScreen(),
         '/select-tags': (context) => const SelectTagsScreen(),
         '/select-cards': (context) => const SelectCardsScreen(),
