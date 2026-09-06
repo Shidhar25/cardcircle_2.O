@@ -8,14 +8,26 @@ import '../../circle/presentation/circle_screen.dart';
 import '../../profile/presentation/profile_screen.dart';
 
 class TabsLayout extends StatefulWidget {
-  const TabsLayout({super.key});
+  /// Which tab to open on. Notifications route here to land the reader on
+  /// Circle, so the tab has to be selectable from outside.
+  final int initialIndex;
+
+  const TabsLayout({super.key, this.initialIndex = 0});
+
+  /// Tab positions, so callers name the destination rather than passing a
+  /// bare integer that silently means the wrong screen if the order ever
+  /// changes.
+  static const int homeTab = 0;
+  static const int benefitsTab = 1;
+  static const int circleTab = 2;
+  static const int profileTab = 3;
 
   @override
   State<TabsLayout> createState() => _TabsLayoutState();
 }
 
 class _TabsLayoutState extends State<TabsLayout> {
-  int _currentIndex = 0;
+  late int _currentIndex = widget.initialIndex;
 
   late List<Widget> _screens;
 

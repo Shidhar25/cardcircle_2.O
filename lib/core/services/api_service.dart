@@ -1234,6 +1234,21 @@ class ApiService {
   }
 
   // 33. Get Push Notifications
+  /// Marks one notification read (`POST /push/notifications/{id}/read`).
+  ///
+  /// Fire-and-forget: the row is already dimmed locally by the time this
+  /// returns, and a failure here is not worth interrupting the reader over.
+  static Future<void> markNotificationRead(String notificationId) async {
+    try {
+      await http.post(
+        Uri.parse('$baseUrl/push/notifications/$notificationId/read'),
+        headers: _headers(requireAuth: true),
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error marking notification read', e, stack);
+    }
+  }
+
   static Future<List<Map<String, dynamic>>?> getNotifications() async {
     try {
       LoggerService.info('Fetching push notifications...');

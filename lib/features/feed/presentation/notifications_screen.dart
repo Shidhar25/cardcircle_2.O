@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
+import 'tabs_layout.dart';
+import '../../../shared/models/app_notification.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../core/services/api_service.dart';
 import '../../circle/state/circle_state.dart';
@@ -25,7 +27,7 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _isLoading = false;
-  List<Map<String, dynamic>> _pushNotifications = [];
+  List<AppNotification> _pushNotifications = [];
 
   @override
   void initState() {
@@ -38,10 +40,49 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final pushData = await ApiService.getNotifications();
     if (mounted) {
       setState(() {
-        _pushNotifications = pushData ?? [];
+        _pushNotifications = (pushData ?? [])
+            .map(AppNotification.tryParse)
+            .nonNulls
+            .toList();
         _isLoading = false;
       });
     }
+  }
+
+  /// Marks a notification read and, where it points somewhere, goes there.
+  ///
+  /// `CONTACT_JOINED` says a contact has just joined — the only useful next
+  /// step is to go and follow them, so it lands on Circle rather than
+  /// leaving the reader to find them.
+  Future<void> _openNotification(AppNotification notif) async {
+    // Dim it immediately: the request is not worth waiting on, and a row
+    // that stays bold after being opened reads as broken.
+    if (!notif.isRead) {
+      setState(() {
+        final i = _pushNotifications.indexWhere((n) => n.id == notif.id);
+        if (i != -1) {
+          _pushNotifications[i] = AppNotification(
+            id: notif.id,
+            title: notif.title,
+            body: notif.body,
+            kind: notif.kind,
+            isRead: true,
+            createdAt: notif.createdAt,
+            data: notif.data,
+          );
+        }
+      });
+      ApiService.markNotificationRead(notif.id);
+    }
+
+    if (!notif.isActionable || !mounted) return;
+
+    Navigator.pushNamedAndRemoveUntil(
+      context,
+      '/home',
+      (route) => false,
+      arguments: TabsLayout.circleTab,
+    );
   }
 
   void _showCardAccessSheet(String followId, String requesterName) {
@@ -500,83 +541,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 color: AppColors.textFaint,
                               ),
                               const SizedBox(height: AppSpacing.mdLg),
-                              ..._pushNotifications.map((notif) {
-                                final title = notif['title'] ?? 'Notification';
-                                final message =
-                                    notif['body'] ?? notif['message'] ?? '';
-                                final time = notif['created_at'] ?? 'Recently';
-
-                                return Padding(
+                              ..._pushNotifications.map(
+                                (notif) => Padding(
                                   padding: const EdgeInsets.only(
                                     bottom: AppSpacing.sm,
                                   ),
-                                  child: OutlinedSurface(
-                                    padding: const EdgeInsets.all(
-                                      AppSpacing.mdLg,
-                                    ),
-                                    child: Row(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Container(
-                                          width: 34,
-                                          height: 34,
-                                          alignment: Alignment.center,
-                                          decoration: BoxDecoration(
-                                            borderRadius: BorderRadius.circular(
-                                              AppRadii.card,
-                                            ),
-                                            color: AppColors.elevated,
-                                          ),
-                                          child: const Icon(
-                                            PhosphorIconsFill.bell,
-                                            size: 16,
-                                            color: AppColors.gold,
-                                          ),
-                                        ),
-                                        const SizedBox(width: AppSpacing.mdLg),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                title,
-                                                style: AppText.sans(
-                                                  13,
-                                                  color: AppColors.text,
-                                                  height: 1.4,
-                                                ),
-                                              ),
-                                              if (message
-                                                  .toString()
-                                                  .isNotEmpty) ...[
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  message.toString(),
-                                                  style: AppText.sans(
-                                                    12,
-                                                    color: AppColors.textDim,
-                                                    height: 1.4,
-                                                  ),
-                                                ),
-                                              ],
-                                              const SizedBox(height: 5),
-                                              MonoLabel(
-                                                '$time',
-                                                size: 9,
-                                                letterSpacing: 1.1,
-                                                color: AppColors.textGhost,
-                                                uppercase: false,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  child: _NotificationRow(
+                                    notification: notif,
+                                    onTap: () => _openNotification(notif),
                                   ),
-                                );
-                              }),
+                                ),
+                              ),
                             ],
                           ],
                         ),
@@ -585,6 +560,110 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// One notification.
+///
+/// The icon is chosen by type and unread rows are marked, because a list
+/// where every entry looks identical makes the reader read all of them to
+/// find the one that matters.
+class _NotificationRow extends StatelessWidget {
+  final AppNotification notification;
+  final VoidCallback onTap;
+
+  const _NotificationRow({required this.notification, required this.onTap});
+
+  (IconData, Color) get _glyph => switch (notification.kind) {
+    NotificationKind.contactJoined => (
+      PhosphorIconsFill.userPlus,
+      AppColors.teal,
+    ),
+    NotificationKind.followRequest => (
+      PhosphorIconsFill.userCircle,
+      AppColors.gold,
+    ),
+    NotificationKind.other => (PhosphorIconsFill.bell, AppColors.gold),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, tint) = _glyph;
+    final unread = !notification.isRead;
+
+    return OutlinedSurface(
+      onTap: onTap,
+      // Unread rows sit slightly proud of the read ones.
+      background: unread
+          ? AppColors.gold.withValues(alpha: 0.05)
+          : AppColors.surface,
+      padding: const EdgeInsets.all(AppSpacing.mdLg),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(AppRadii.card),
+              color: AppColors.elevated,
+            ),
+            child: Icon(icon, size: 16, color: tint),
+          ),
+          const SizedBox(width: AppSpacing.mdLg),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notification.title,
+                  style: AppText.sans(
+                    13,
+                    weight: unread ? FontWeight.w500 : FontWeight.w400,
+                    color: AppColors.text,
+                    height: 1.4,
+                  ),
+                ),
+                if (notification.body.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    notification.body,
+                    style: AppText.sans(
+                      12,
+                      color: AppColors.textDim,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (notification.relativeTime.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  MonoLabel(
+                    notification.relativeTime,
+                    size: 9,
+                    letterSpacing: 1.1,
+                    color: AppColors.textGhost,
+                    uppercase: false,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (unread) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Container(
+              width: 7,
+              height: 7,
+              margin: const EdgeInsets.only(top: 6),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.gold,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
