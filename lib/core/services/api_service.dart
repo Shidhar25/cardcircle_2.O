@@ -842,6 +842,33 @@ class ApiService {
     }
   }
 
+  /// Creates a shareable, one-time invite link (`POST /invites`).
+  ///
+  /// Unlike the per-contact invite this addresses nobody: the response's
+  /// `whatsapp_url` has no recipient number, so the user picks who to send
+  /// it to. That is the point — it is the route in for someone whose
+  /// contacts are not synced, or who has nobody matched to invite.
+  ///
+  /// The link carries the creator's identity, so redeeming it opens a
+  /// follow request back to them. It expires in 24 hours and is consumed on
+  /// first redemption, so a fresh one is created per share rather than
+  /// cached.
+  static Future<ApiResult<Map<String, dynamic>>> createInviteLink() async {
+    try {
+      LoggerService.info('Creating invite link...');
+      final response = await http.post(
+        Uri.parse('$baseUrl/invites'),
+        headers: _headers(requireAuth: true),
+      );
+      return ApiResult.fromResponse(response, action: 'Create invite link');
+    } catch (e, stack) {
+      LoggerService.error('Error creating invite link', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
   /// Invites an address-book contact who is not on CardCircle yet
   /// (`POST /user/contacts/{contactId}/invite`).
   ///
