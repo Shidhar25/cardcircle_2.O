@@ -1,4 +1,5 @@
 import 'credit_card.dart';
+import 'feedback_question.dart';
 import 'hack_rating.dart';
 
 class HackStep {
@@ -52,6 +53,16 @@ class Hack {
 
   /// This user's own score, 1-5, or null when they have not rated it.
   final int? myRating;
+
+  /// Whether this reader still owes feedback on *this* benefit, embedded by
+  /// the list endpoints alongside the ratings.
+  ///
+  /// Null means the payload carried no `feedback_prompt` at all — a hack
+  /// reached outside a list, or an older backend — not "nothing to ask".
+  /// The distinction matters: null is the only case where the standalone
+  /// endpoint still needs calling, and collapsing it to
+  /// [FeedbackPrompt.none] would silently stop ever asking on those paths.
+  final FeedbackPrompt? feedbackPrompt;
   final String availedby;
   final String circledetail;
   final String image;
@@ -74,6 +85,7 @@ class Hack {
     this.platformRating = HackRating.none,
     this.circleRating = HackRating.none,
     this.myRating,
+    this.feedbackPrompt,
     required this.availedby,
     this.circledetail = '',
     this.image = '',
@@ -102,11 +114,33 @@ class Hack {
   /// Whether [headlineRating] came from the user's circle.
   bool get headlineIsCircle => circleRating.hasRatings;
 
+  /// Returns a copy with the feedback prompt spent.
+  ///
+  /// The embedded prompt came from a list fetched before the reader
+  /// answered, so it still says "ask". Re-entering from that same list
+  /// would ask again, and the server would reject the duplicate answers.
+  Hack withFeedbackAnswered() => _copyWith(feedbackPrompt: FeedbackPrompt.none);
+
   /// Returns a copy carrying freshly submitted ratings.
   Hack withRatings({
     required HackRating platform,
     required HackRating circle,
     required int? mine,
+  }) => _copyWith(
+    platformRating: platform,
+    circleRating: circle,
+    myRating: mine,
+    clearMyRatingWhenNull: true,
+  );
+
+  /// Field-by-field copy. Private because every caller should go through a
+  /// named helper that says *why* the copy exists.
+  Hack _copyWith({
+    HackRating? platformRating,
+    HackRating? circleRating,
+    int? myRating,
+    bool clearMyRatingWhenNull = false,
+    FeedbackPrompt? feedbackPrompt,
   }) => Hack(
     id: id,
     name: name,
@@ -115,9 +149,10 @@ class Hack {
     cardIds: cardIds,
     savings: savings,
     category: category,
-    platformRating: platform,
-    circleRating: circle,
-    myRating: mine,
+    platformRating: platformRating ?? this.platformRating,
+    circleRating: circleRating ?? this.circleRating,
+    myRating: clearMyRatingWhenNull ? myRating : (myRating ?? this.myRating),
+    feedbackPrompt: feedbackPrompt ?? this.feedbackPrompt,
     availedby: availedby,
     circledetail: circledetail,
     image: image,
@@ -185,6 +220,11 @@ class Hack {
       platformRating: HackRating.parse(json['platform_rating']),
       circleRating: HackRating.parse(json['circle_rating']),
       myRating: myRating,
+      feedbackPrompt: json.containsKey('feedback_prompt')
+          ? FeedbackPrompt.parse(
+              (json['feedback_prompt'] as Map?)?.cast<String, dynamic>(),
+            )
+          : null,
       availedby: json['availedby']?.toString() ?? '',
       circledetail: json['circledetail']?.toString() ?? '',
       image: json['image']?.toString() ?? '',

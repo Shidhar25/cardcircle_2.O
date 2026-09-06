@@ -52,14 +52,13 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
   Hack? _updated;
   bool _rating = false;
 
-  /// The questions to ask when the reader leaves, fetched on arrival.
+  /// The questions to ask when the reader leaves.
   ///
-  /// Fetched early but asked late: the request needs time to land, while
-  /// the question itself ("did this work for you?") only makes sense once
-  /// the reader has actually read the benefit. Asking on entry put it in
-  /// front of content they had not seen yet.
+  /// Asked late but resolved early: the question itself ("did this work for
+  /// you?") only makes sense once the reader has read the benefit, but
+  /// whether to ask at all has to be settled before they leave.
   FeedbackPrompt _prompt = FeedbackPrompt.none;
-  bool _promptFetched = false;
+  bool _promptResolved = false;
 
   /// Set once feedback has been asked, so leaving a second time — or the
   /// programmatic pop that follows the sheet — goes straight through.
@@ -68,14 +67,35 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_promptFetched) return;
-    _promptFetched = true;
-    _prefetchPrompt();
+    if (_promptResolved) return;
+    _promptResolved = true;
+    _resolvePrompt();
   }
 
-  Future<void> _prefetchPrompt() async {
-    final prompt = await ApiService.getFeedbackPrompt(_feedbackContext);
-    if (mounted) _prompt = prompt;
+  /// Works out whether to ask, preferring what the list already told us.
+  ///
+  /// The list endpoints embed `feedback_prompt` per benefit, so arriving
+  /// from a list costs no request at all. Only a benefit reached without
+  /// one — a deep link — falls back to the standalone endpoint, and that
+  /// call is scoped by `hack_id`: feedback is tracked per benefit, so an
+  /// unscoped check would report "already answered" for every benefit once
+  /// the reader had answered for any one of them.
+  Future<void> _resolvePrompt() async {
+    final hack = ModalRoute.of(context)?.settings.arguments as Hack?;
+    if (hack == null) return;
+
+    final embedded = hack.feedbackPrompt;
+    if (embedded != null) {
+      // The list is authoritative; nothing to ask the server.
+      if (mounted) setState(() => _prompt = embedded);
+      return;
+    }
+
+    final prompt = await ApiService.getFeedbackPrompt(
+      _feedbackContext,
+      hackId: hack.id,
+    );
+    if (mounted) setState(() => _prompt = prompt);
   }
 
   /// Asks for feedback as the reader leaves, then completes the pop.
@@ -86,12 +106,22 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
     _feedbackDone = true;
 
     if (_prompt.hasSomethingToAsk) {
-      await FeedbackSheet.show(
+      final answered = await FeedbackSheet.show(
         context,
         feedbackContext: _feedbackContext,
         questions: _prompt.questions,
         hackId: hack.id,
       );
+
+      // The list this benefit came from still carries the pre-answer
+      // prompt, so without this, re-opening it from that same list would
+      // ask again and the server would reject the duplicate answers.
+      if (answered && mounted) {
+        Provider.of<FeedState>(
+          context,
+          listen: false,
+        ).replaceHack((_updated ?? hack).withFeedbackAnswered());
+      }
     }
 
     if (mounted) Navigator.of(context).pop();

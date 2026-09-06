@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cardcircle/shared/models/feedback_question.dart';
+import 'package:cardcircle/shared/models/hack.dart';
 
 /// The two seeded questions for `hack_benefits_first_view`.
 Map<String, dynamic> _prompt({
@@ -187,6 +188,84 @@ void main() {
         ),
       );
       expect(p.questions.map((q) => q.id), ['a', 'b']);
+    });
+  });
+
+  group('the prompt embedded on a hack', () {
+    Map<String, dynamic> hackJson({Object? prompt, bool includeKey = true}) => {
+      'id': 'h1',
+      'name': 'A benefit',
+      'heading': 'Does a thing',
+      'steps': <dynamic>[],
+      'card_ids': <String>[],
+      if (includeKey) 'feedback_prompt': prompt,
+    };
+
+    test('an embedded prompt is read off the list payload', () {
+      final h = Hack.fromJson(
+        hackJson(
+          prompt: {
+            'should_prompt': true,
+            'questions': [
+              {
+                'question_id': 'q1',
+                'question_text': 'A',
+                'question_type': 'YES_NO',
+              },
+            ],
+          },
+        ),
+      );
+      expect(h.feedbackPrompt, isNotNull);
+      expect(h.feedbackPrompt!.hasSomethingToAsk, isTrue);
+    });
+
+    test('an embedded "already answered" is authoritative, not absent', () {
+      // This is the distinction the fix turns on: the server said no, so
+      // the app must not fall back to asking the standalone endpoint.
+      final h = Hack.fromJson(
+        hackJson(prompt: {'should_prompt': false, 'questions': <dynamic>[]}),
+      );
+      expect(h.feedbackPrompt, isNotNull);
+      expect(h.feedbackPrompt!.hasSomethingToAsk, isFalse);
+    });
+
+    test('a payload with no feedback_prompt key leaves it null', () {
+      // A benefit reached outside a list, or an older backend. Null is the
+      // only case where the standalone endpoint still needs calling —
+      // collapsing it to "nothing to ask" would stop ever asking there.
+      final h = Hack.fromJson(hackJson(includeKey: false));
+      expect(h.feedbackPrompt, isNull);
+    });
+
+    test('a null feedback_prompt value is still an answer, not a gap', () {
+      final h = Hack.fromJson(hackJson(prompt: null));
+      expect(h.feedbackPrompt, isNotNull);
+      expect(h.feedbackPrompt!.hasSomethingToAsk, isFalse);
+    });
+
+    test('answering spends the prompt without touching anything else', () {
+      final before = Hack.fromJson(
+        hackJson(
+          prompt: {
+            'should_prompt': true,
+            'questions': [
+              {
+                'question_id': 'q1',
+                'question_text': 'A',
+                'question_type': 'YES_NO',
+              },
+            ],
+          },
+        ),
+      );
+      final after = before.withFeedbackAnswered();
+
+      expect(after.feedbackPrompt!.hasSomethingToAsk, isFalse);
+      expect(after.id, before.id);
+      expect(after.name, before.name);
+      expect(after.platformRating, before.platformRating);
+      expect(after.myRating, before.myRating);
     });
   });
 }

@@ -849,10 +849,24 @@ class ApiService {
   /// The server owns "once per user per context", so the app never has to
   /// track whether it has asked before — it just asks at the triggering
   /// moment and shows nothing when told not to.
-  static Future<FeedbackPrompt> getFeedbackPrompt(String context) async {
+  /// [hackId] scopes the question to one benefit: feedback is tracked per
+  /// user *and* hack, so answering for one benefit must not silence the
+  /// prompt on every other.
+  ///
+  /// Prefer the `feedback_prompt` embedded on a [Hack] by the list
+  /// endpoints — this is the fallback for benefits reached without a list
+  /// fetch, such as a deep link.
+  static Future<FeedbackPrompt> getFeedbackPrompt(
+    String context, {
+    String? hackId,
+  }) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/feedback/$context/prompt'),
+        Uri.parse('$baseUrl/feedback/$context/prompt').replace(
+          queryParameters: {
+            if (hackId != null && hackId.isNotEmpty) 'hack_id': hackId,
+          },
+        ),
         headers: _headers(requireAuth: true),
       );
       final result = ApiResult.fromResponse(
