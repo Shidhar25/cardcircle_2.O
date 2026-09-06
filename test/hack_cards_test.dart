@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:cardcircle/shared/models/credit_card.dart';
 import 'package:cardcircle/shared/models/hack.dart';
+import 'package:cardcircle/shared/models/hack_rating.dart';
 
 CreditCard _card({
   required String userCardId,
@@ -98,24 +99,101 @@ void main() {
     });
   });
 
-  group('rating', () {
-    test('an unrated benefit has no rating, rather than a made-up 4.8', () {
-      // Every unrated benefit used to display a confident score nobody gave
-      // it. `rating` is null across the live catalog today.
-      expect(Hack.fromJson(_json()).rating, isNull);
+  group('ratings', () {
+    Map<String, dynamic> withRatings({
+      Object? platform,
+      Object? circle,
+      Object? mine,
+    }) => {
+      ..._json(),
+      'platform_rating': platform,
+      'circle_rating': circle,
+      'my_rating': mine,
+    };
+
+    test("reads both aggregates and the user's own score", () {
+      final h = Hack.fromJson(
+        withRatings(
+          platform: {'average': 3, 'count': 3},
+          circle: {'average': 4.5, 'count': 1},
+          mine: 5,
+        ),
+      );
+      expect(h.platformRating.average, 3);
+      expect(h.platformRating.count, 3);
+      expect(h.circleRating.average, 4.5);
+      expect(h.myRating, 5);
     });
 
-    test('a real rating is kept', () {
-      expect(Hack.fromJson(_json(rating: 4.2)).rating, 4.2);
-      expect(Hack.fromJson(_json(rating: 5)).rating, 5.0);
+    test('an unrated benefit reports no ratings, not a zero score', () {
+      // Rendering an absent aggregate as "0.0" reads as a damning score.
+      final h = Hack.fromJson(withRatings());
+      expect(h.platformRating.hasRatings, isFalse);
+      expect(h.circleRating.hasRatings, isFalse);
+      expect(h.myRating, isNull);
     });
 
-    test('a stringified rating is read', () {
-      expect(Hack.fromJson(_json(rating: '3.7')).rating, 3.7);
+    test('a zero count is treated as unrated whatever the average says', () {
+      final h = Hack.fromJson(
+        withRatings(platform: {'average': 4.9, 'count': 0}),
+      );
+      expect(h.platformRating.hasRatings, isFalse);
     });
 
-    test('a junk rating degrades to none, not to a default', () {
-      expect(Hack.fromJson(_json(rating: 'excellent')).rating, isNull);
+    test('the circle leads when anyone in it has rated', () {
+      // The circle's opinion is the signal the app exists to surface, so it
+      // wins over a global average rather than being blended into one.
+      final h = Hack.fromJson(
+        withRatings(
+          platform: {'average': 2, 'count': 900},
+          circle: {'average': 5, 'count': 1},
+        ),
+      );
+      expect(h.headlineIsCircle, isTrue);
+      expect(h.headlineRating.average, 5);
+    });
+
+    test('the platform average stands in when the circle is silent', () {
+      final h = Hack.fromJson(
+        withRatings(platform: {'average': 4, 'count': 12}),
+      );
+      expect(h.headlineIsCircle, isFalse);
+      expect(h.headlineRating.count, 12);
+    });
+
+    test('malformed rating blocks degrade rather than throwing', () {
+      for (final bad in ['nope', 42, <String>[], null]) {
+        final h = Hack.fromJson(withRatings(platform: bad, circle: bad));
+        expect(h.platformRating, HackRating.none, reason: '$bad');
+        expect(h.circleRating, HackRating.none, reason: '$bad');
+      }
+    });
+
+    test('stringified numbers are read', () {
+      final h = Hack.fromJson(
+        withRatings(platform: {'average': '3.5', 'count': '4'}, mine: '2'),
+      );
+      expect(h.platformRating.average, 3.5);
+      expect(h.platformRating.count, 4);
+      expect(h.myRating, 2);
+    });
+
+    test('whole numbers display with one decimal, like the rest', () {
+      expect(const HackRating(average: 3, count: 3).display, '3.0');
+    });
+
+    test('withRatings swaps the scores and keeps everything else', () {
+      final before = Hack.fromJson(_json());
+      final after = before.withRatings(
+        platform: const HackRating(average: 4, count: 10),
+        circle: const HackRating(average: 5, count: 2),
+        mine: 5,
+      );
+      expect(after.myRating, 5);
+      expect(after.platformRating.count, 10);
+      expect(after.id, before.id);
+      expect(after.cardIds, before.cardIds);
+      expect(after.steps.length, before.steps.length);
     });
   });
 

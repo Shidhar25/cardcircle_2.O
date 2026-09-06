@@ -11,6 +11,7 @@ import '../../../shared/models/hack.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/meta_chip.dart';
 import '../../../shared/widgets/primitives.dart';
+import '../../../shared/widgets/rating_stars.dart';
 
 /// v1 screen 21 — Benefits: search bar, MY BENEFITS / CIRCLE BENEFITS
 /// segmented tabs, a horizontal category pill row, and a vertical feed.
@@ -435,35 +436,6 @@ class _FeedFooter extends StatelessWidget {
   }
 }
 
-/// The benefit's rating, or nothing when it has not been rated.
-class _RatingLine extends StatelessWidget {
-  final double? rating;
-
-  const _RatingLine({required this.rating});
-
-  @override
-  Widget build(BuildContext context) {
-    final value = rating;
-    if (value == null) return const SizedBox.shrink();
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Icon(PhosphorIconsFill.star, size: 11, color: AppColors.gold),
-        const SizedBox(width: 4),
-        Text(
-          value.toStringAsFixed(1),
-          style: AppText.mono(
-            9.5,
-            ls: 0.4,
-            w: FontWeight.w700,
-            c: AppColors.gold,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _HackRow extends StatelessWidget {
   final Hack hack;
   final AvatarHue hue;
@@ -514,11 +486,15 @@ class _HackRow extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      // The rating, where the benefit has one. This line
-                      // used to read "VERIFIED · RECENTLY" — two hardcoded
-                      // constants identical on every row, telling the
-                      // reader nothing.
-                      _RatingLine(rating: hack.rating),
+                      // The rating, leading with the circle's score when
+                      // there is one. This line used to read
+                      // "VERIFIED · RECENTLY" — two hardcoded constants
+                      // identical on every row, telling the reader nothing.
+                      RatingBadge(
+                        rating: hack.headlineRating,
+                        fromCircle: hack.headlineIsCircle,
+                        size: 9.5,
+                      ),
                     ],
                   ),
                 ),

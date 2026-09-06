@@ -180,6 +180,23 @@ class FeedState extends ChangeNotifier {
         : ApiService.getCircleHacks(page: page);
   }
 
+  /// Swaps a benefit for an updated copy, keeping both lists in step.
+  ///
+  /// Rating a benefit on the detail screen returns fresh aggregates; without
+  /// this the list behind it would still show the old score after going
+  /// back.
+  void replaceHack(Hack updated) {
+    var changed = false;
+    for (final list in [_mine.items, _circle.items]) {
+      final i = list.indexWhere((h) => h.id == updated.id);
+      if (i != -1) {
+        list[i] = updated;
+        changed = true;
+      }
+    }
+    if (changed) notifyListeners();
+  }
+
   void likeHack(String id) {
     LoggerService.debug('Toggling like for hack ID: $id');
     for (final list in [_mine.items, _circle.items]) {

@@ -1,4 +1,5 @@
 import 'credit_card.dart';
+import 'hack_rating.dart';
 
 class HackStep {
   final String name;
@@ -38,11 +39,19 @@ class Hack {
   final String savings;
   final String category;
 
-  /// Editorial rating, or null when the benefit has not been rated.
+  /// How everyone on CardCircle rates this benefit.
+  final HackRating platformRating;
+
+  /// How the people this user follows rate it.
   ///
-  /// Nullable on purpose: this used to default to 4.8, so every unrated
-  /// benefit displayed a confident score nobody had given it.
-  final double? rating;
+  /// Kept separate from [platformRating] rather than blended: the whole
+  /// premise of the app is that your circle's opinion carries more weight
+  /// than a global average, and averaging the two would erase exactly that
+  /// signal.
+  final HackRating circleRating;
+
+  /// This user's own score, 1-5, or null when they have not rated it.
+  final int? myRating;
   final String availedby;
   final String circledetail;
   final String image;
@@ -62,7 +71,9 @@ class Hack {
     required this.cardIds,
     required this.savings,
     required this.category,
-    this.rating,
+    this.platformRating = HackRating.none,
+    this.circleRating = HackRating.none,
+    this.myRating,
     required this.availedby,
     this.circledetail = '',
     this.image = '',
@@ -79,6 +90,44 @@ class Hack {
 
   /// Whether this benefit names specific cards at all.
   bool get isCardSpecific => cardIds.isNotEmpty;
+
+  /// The rating worth leading with.
+  ///
+  /// Your circle's score wins when anyone in it has rated, because that is
+  /// the opinion the app exists to surface; otherwise the platform average
+  /// stands in.
+  HackRating get headlineRating =>
+      circleRating.hasRatings ? circleRating : platformRating;
+
+  /// Whether [headlineRating] came from the user's circle.
+  bool get headlineIsCircle => circleRating.hasRatings;
+
+  /// Returns a copy carrying freshly submitted ratings.
+  Hack withRatings({
+    required HackRating platform,
+    required HackRating circle,
+    required int? mine,
+  }) => Hack(
+    id: id,
+    name: name,
+    heading: heading,
+    steps: steps,
+    cardIds: cardIds,
+    savings: savings,
+    category: category,
+    platformRating: platform,
+    circleRating: circle,
+    myRating: mine,
+    availedby: availedby,
+    circledetail: circledetail,
+    image: image,
+    thingsToNote: thingsToNote,
+    likes: likes,
+    liked: liked,
+    author: author,
+    authorInitials: authorInitials,
+    isLocked: isLocked,
+  );
 
   /// The names of [mine] that this benefit applies to.
   ///
@@ -120,10 +169,10 @@ class Hack {
             .toList() ??
         [];
 
-    final rawRating = json['rating'];
-    final double? parsedRating = rawRating is num
-        ? rawRating.toDouble()
-        : (rawRating is String ? double.tryParse(rawRating) : null);
+    final rawMine = json['my_rating'];
+    final int? myRating = rawMine is num
+        ? rawMine.toInt()
+        : (rawMine is String ? int.tryParse(rawMine) : null);
 
     return Hack(
       id: json['id']?.toString() ?? '',
@@ -133,7 +182,9 @@ class Hack {
       cardIds: cardsList,
       savings: json['savings']?.toString() ?? '5%',
       category: json['category']?.toString() ?? 'General',
-      rating: parsedRating,
+      platformRating: HackRating.parse(json['platform_rating']),
+      circleRating: HackRating.parse(json['circle_rating']),
+      myRating: myRating,
       availedby: json['availedby']?.toString() ?? '',
       circledetail: json['circledetail']?.toString() ?? '',
       image: json['image']?.toString() ?? '',

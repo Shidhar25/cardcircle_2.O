@@ -842,6 +842,31 @@ class ApiService {
     }
   }
 
+  /// Submits or updates this user's 1-5 rating for a benefit
+  /// (`POST /hacks/{hackId}/rate`).
+  ///
+  /// The response carries both refreshed aggregates plus the user's own
+  /// score, so the caller can update the row without re-fetching the list.
+  static Future<ApiResult<Map<String, dynamic>>> rateHack(
+    String hackId,
+    int rating,
+  ) async {
+    try {
+      LoggerService.info('Rating hack $hackId: $rating');
+      final response = await http.post(
+        Uri.parse('$baseUrl/hacks/$hackId/rate'),
+        headers: _headers(requireAuth: true),
+        body: jsonEncode({'rating': rating}),
+      );
+      return ApiResult.fromResponse(response, action: 'Rate benefit');
+    } catch (e, stack) {
+      LoggerService.error('Error rating hack $hackId', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
   /// Creates a shareable, one-time invite link (`POST /invites`).
   ///
   /// Unlike the per-contact invite this addresses nobody: the response's

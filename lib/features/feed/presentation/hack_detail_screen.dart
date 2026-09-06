@@ -5,8 +5,13 @@ import 'package:phosphor_icons/phosphor_icons.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/hack.dart';
+import '../state/feed_state.dart';
+import '../../../core/services/api_service.dart';
+import '../../../shared/models/hack_rating.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/primitives.dart';
+import '../../../shared/widgets/app_snackbar.dart';
+import '../../../shared/widgets/rating_stars.dart';
 
 /// v1 screen 22 — Benefit detail: a full-bleed hero image, the benefit's
 /// title, a You Save / Circle Using stat pair, a numbered "HOW TO AVAIL
@@ -37,6 +42,45 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
   /// controller — sharing the page's would make the two fight.
   final ScrollController _stepsController = ScrollController();
 
+  /// The benefit as currently displayed.
+  ///
+  /// Rating it returns fresh aggregates, and this screen was pushed with an
+  /// immutable route argument, so the updated copy is held here rather than
+  /// making the reader leave and come back to see their own score land.
+  Hack? _updated;
+  bool _rating = false;
+
+  Future<void> _submitRating(Hack hack, int stars) async {
+    if (_rating) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _rating = true);
+    final result = await ApiService.rateHack(hack.id, stars);
+    if (!mounted) return;
+    setState(() => _rating = false);
+
+    if (!result.ok) {
+      messenger.showError(result.display('Could not save your rating.'));
+      return;
+    }
+
+    final data = result.data ?? const <String, dynamic>{};
+    final mine = data['my_rating'];
+    setState(() {
+      _updated = hack.withRatings(
+        platform: HackRating.parse(data['platform_rating']),
+        circle: HackRating.parse(data['circle_rating']),
+        mine: mine is num ? mine.toInt() : stars,
+      );
+    });
+
+    // Keep the list behind this screen in step, so going back does not show
+    // the old score.
+    if (mounted) {
+      Provider.of<FeedState>(context, listen: false).replaceHack(_updated!);
+    }
+  }
+
   @override
   void dispose() {
     _stepsController.dispose();
@@ -60,6 +104,8 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
       );
     }
 
+    // Prefer the locally updated copy once the user has rated.
+    final shown = _updated ?? hack;
     final steps = hack.steps;
     final media = MediaQuery.of(context);
     final myCardNames = hack.myCardNames(
@@ -222,21 +268,36 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const MonoLabel(
-                                    'CIRCLE USING',
+                                    'YOUR CIRCLE',
                                     size: 8.5,
                                     letterSpacing: 1.4,
                                     color: AppColors.textFaint,
                                   ),
                                   const SizedBox(height: 5.6),
+                                  // The circle's real score. This box used
+                                  // to print hack.likes, a hardcoded 124
+                                  // identical on every benefit.
                                   Text(
-                                    '${hack.likes}',
+                                    shown.circleRating.hasRatings
+                                        ? shown.circleRating.display
+                                        : '—',
                                     style: AppText.mono(
                                       19,
                                       ls: 0,
                                       w: FontWeight.w700,
-                                      c: AppColors.gold,
+                                      c: shown.circleRating.hasRatings
+                                          ? AppColors.gold
+                                          : AppColors.textFaint,
                                     ),
                                   ),
+                                  if (shown.circleRating.hasRatings)
+                                    Text(
+                                      'from ${shown.circleRating.count}',
+                                      style: AppText.sans(
+                                        10,
+                                        color: AppColors.textFaint,
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),
@@ -368,6 +429,13 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: AppSpacing.xxl),
+                      _RatingPanel(
+                        hack: shown,
+                        busy: _rating,
+                        onRate: _submitRating,
+                      ),
+
                       if (hack.thingsToNote.isNotEmpty) ...[
                         const SizedBox(height: AppSpacing.md),
                         Container(
@@ -571,6 +639,89 @@ class _Hero extends StatelessWidget {
               background: AppColors.background.withValues(alpha: 0.78),
               onTap: () => Navigator.pop(context),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Both aggregate scores, and the reader's own stars.
+///
+/// The two are shown side by side rather than blended: the circle's opinion
+/// is the signal this app exists to surface, and averaging it into a global
+/// number would erase it.
+class _RatingPanel extends StatelessWidget {
+  final Hack hack;
+  final bool busy;
+  final void Function(Hack hack, int stars) onRate;
+
+  const _RatingPanel({
+    required this.hack,
+    required this.busy,
+    required this.onRate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedSurface(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const MonoLabel(
+            'RATINGS',
+            size: 9.5,
+            letterSpacing: 1.8,
+            color: AppColors.textFaint,
+          ),
+          const SizedBox(height: AppSpacing.md),
+
+          if (hack.circleRating.hasRatings) ...[
+            RatingBadge(rating: hack.circleRating, fromCircle: true, size: 11),
+            const SizedBox(height: 6),
+          ],
+          if (hack.platformRating.hasRatings)
+            Row(
+              children: [
+                Flexible(
+                  child: RatingBadge(rating: hack.platformRating, size: 11),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    'on CardCircle',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    softWrap: false,
+                    style: AppText.sans(11, color: AppColors.textFaint),
+                  ),
+                ),
+              ],
+            ),
+          if (!hack.circleRating.hasRatings && !hack.platformRating.hasRatings)
+            Text(
+              'Not rated yet — yours would be the first.',
+              style: AppText.sans(12, color: AppColors.textDim),
+            ),
+
+          const SizedBox(height: AppSpacing.lg),
+          const Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: AppSpacing.lg),
+
+          Text(
+            hack.myRating == null ? 'Rate this benefit' : 'Your rating',
+            style: AppText.sans(
+              12.5,
+              weight: FontWeight.w500,
+              color: AppColors.text,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          RatingPicker(
+            value: hack.myRating,
+            busy: busy,
+            onRate: (stars) => onRate(hack, stars),
           ),
         ],
       ),

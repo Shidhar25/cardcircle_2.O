@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:cardcircle/features/auth/state/auth_state.dart';
 import 'package:cardcircle/features/feed/presentation/hack_detail_screen.dart';
 import 'package:cardcircle/shared/models/hack.dart';
+import 'package:cardcircle/shared/models/hack_rating.dart';
 
 Hack _hack({int stepCount = 3}) => Hack(
   id: 'h1',
@@ -31,7 +32,7 @@ Hack _hack({int stepCount = 3}) => Hack(
   image: 'https://example.invalid/hero.webp',
   savings: '3.5% saved on every international transaction, with no cap',
   category: 'Forex / International',
-  rating: 4.8,
+  platformRating: const HackRating(average: 4.2, count: 8),
   availedby: '',
   thingsToNote: const ['Decline dynamic currency conversion at the terminal.'],
 );
