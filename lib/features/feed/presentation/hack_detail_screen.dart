@@ -8,6 +8,7 @@ import '../../../shared/models/hack.dart';
 import '../state/feed_state.dart';
 import '../../../core/services/api_service.dart';
 import '../../../shared/models/hack_rating.dart';
+import '../../../shared/widgets/circle_availability_view.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/primitives.dart';
 import '../../../shared/widgets/app_snackbar.dart';
@@ -520,6 +521,17 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                             ),
                           ),
                         ],
+                        // Above the ratings: a score says whether the
+                        // benefit is good, this says whether it is reachable
+                        // — and the reader who cannot use it themselves came
+                        // here to find out who can.
+                        if (!shown.circleAvailability.isEmpty) ...[
+                          const SizedBox(height: AppSpacing.xxl),
+                          CircleAvailabilityPanel(
+                            availability: shown.circleAvailability,
+                          ),
+                        ],
+
                         const SizedBox(height: AppSpacing.xxl),
                         _RatingPanel(
                           hack: shown,

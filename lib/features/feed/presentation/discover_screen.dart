@@ -9,6 +9,7 @@ import '../../auth/state/auth_state.dart';
 import '../../profile/state/category_state.dart';
 import '../../../shared/models/spend_category.dart';
 import '../../../shared/models/hack.dart';
+import '../../../shared/widgets/circle_availability_view.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/meta_chip.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -594,6 +595,16 @@ class _HackRow extends StatelessWidget {
                       height: 1.55,
                     ),
                   ),
+                  // Who in the circle could actually use this. Reason enough
+                  // to open a benefit the reader holds no card for, so it
+                  // sits in the tap area with the title and blurb.
+                  if (!hack.circleAvailability.isEmpty) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    CircleAvailabilityStrip(
+                      availability: hack.circleAvailability,
+                      onTap: onOpen,
+                    ),
+                  ],
                 ],
               ),
             ),
