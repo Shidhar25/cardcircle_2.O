@@ -8,6 +8,8 @@ import 'core/services/logger_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'core/services/api_service.dart';
 import 'core/services/notification_service.dart';
+import 'core/services/session_service.dart';
+import 'shared/widgets/app_snackbar.dart';
 import 'features/auth/state/auth_state.dart';
 import 'features/feed/state/feed_state.dart';
 import 'features/circle/state/circle_state.dart';
@@ -64,13 +66,53 @@ void main() async {
   );
 }
 
-class CardCircleApp extends StatelessWidget {
+/// Navigator and messenger handles for things that happen outside the widget
+/// tree — specifically an expired session, which is discovered inside an API
+/// call where there is no BuildContext to route from.
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<ScaffoldMessengerState> appMessengerKey =
+    GlobalKey<ScaffoldMessengerState>();
+
+class CardCircleApp extends StatefulWidget {
   const CardCircleApp({super.key});
+
+  @override
+  State<CardCircleApp> createState() => _CardCircleAppState();
+}
+
+class _CardCircleAppState extends State<CardCircleApp> {
+  @override
+  void initState() {
+    super.initState();
+    // Registered once, for the life of the app: when the refresh token is
+    // rejected the user is dropped back at login with an explanation,
+    // wherever they happened to be.
+    SessionService.onSessionExpired = _handleSessionExpired;
+  }
+
+  void _handleSessionExpired() {
+    // The 401 can land during a build or a frame callback, so the routing
+    // waits for the frame to finish rather than tearing down the tree
+    // mid-build.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final navigator = appNavigatorKey.currentState;
+      final navContext = appNavigatorKey.currentContext;
+      if (navigator == null || navContext == null) return;
+
+      Provider.of<AuthState>(navContext, listen: false).logout();
+      navigator.pushNamedAndRemoveUntil('/login', (route) => false);
+      appMessengerKey.currentState?.showError(
+        'Your session expired. Please sign in again.',
+      );
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'CardCircle',
+      navigatorKey: appNavigatorKey,
+      scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       themeMode: ThemeMode.dark,
       darkTheme: AppTheme.darkTheme,
