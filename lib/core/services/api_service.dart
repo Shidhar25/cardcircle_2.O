@@ -1,11 +1,12 @@
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
 import 'auth_http_client.dart';
 import 'session_service.dart';
 import '../../shared/models/feedback_question.dart';
-import '../../shared/models/network_catalog.dart';
 import '../../shared/models/paged_result.dart';
 import 'local_storage_service.dart';
 import 'logger_service.dart';
@@ -603,7 +604,7 @@ class ApiService {
             ? (raw['cards'] ?? raw['items'] ?? const [])
             : (raw is List ? raw : const []);
         return list
-            .map((item) => _normalizeCatalogCard(item as Map<String, dynamic>))
+            .map((item) => normalizeCatalogCard(item as Map<String, dynamic>))
             .toList();
       }
       LoggerService.warning(
@@ -617,17 +618,45 @@ class ApiService {
 
   /// Maps a browse/catalog row onto the single shape the Add Cards screen
   /// reads, so the UI doesn't have to care whether the backend returned the
-  /// nested catalog layout (`card.name`, `image.url`) or the flat saved-card
-  /// layout (`card_name`, `image_url`).
-  static Map<String, dynamic> _normalizeCatalogCard(Map<String, dynamic> item) {
+  /// grouped catalog layout (one row per product, `variants[]` inside), the
+  /// nested layout (`card.name`, `image.url`) or the flat saved-card layout
+  /// (`card_name`, `image_url`).
+  ///
+  /// The grouped shape is the current one: `/cards` returns "Millennia" once
+  /// with the three networks it was issued on, rather than three rows that
+  /// look like three different cards. The variants ride along untouched so
+  /// the picker can offer them and save the chosen one's `card_id`.
+  @visibleForTesting
+  static Map<String, dynamic> normalizeCatalogCard(Map<String, dynamic> item) {
     final nested = (item['card'] as Map?)?.cast<String, dynamic>();
+    final variants = (item['variants'] as List?)?.whereType<Map>().toList();
 
+    // What the row should look like before the user has chosen: the variant
+    // the server calls default, falling back to the first listed.
+    Map<String, dynamic>? defaultVariant;
+    if (variants != null && variants.isNotEmpty) {
+      final defaultId = item['default_variant_id']?.toString();
+      defaultVariant = variants
+          .cast<Map>()
+          .map((v) => v.cast<String, dynamic>())
+          .firstWhere(
+            (v) => v['card_id']?.toString() == defaultId,
+            orElse: () => variants.first.cast<String, dynamic>(),
+          );
+    }
+
+    // The grouped shape puts the product's own fields at the top level
+    // (`name`), where the older shapes nested them (`card.name`) or prefixed
+    // them (`card_name`).
     String? pick(String flatKey, String nestedKey) {
-      final v = item[flatKey] ?? nested?[nestedKey];
+      final v = item[flatKey] ?? nested?[nestedKey] ?? item[nestedKey];
       return (v is String && v.isNotEmpty) ? v : null;
     }
 
     String? urlOf(dynamic value, String flatKey) {
+      // `image` is a plain URL string in the grouped shape and an object in
+      // the older ones.
+      if (value is String && value.isNotEmpty) return value;
       if (value is Map) {
         final u = value['url'];
         if (u is String && u.isNotEmpty) return u;
@@ -638,17 +667,42 @@ class ApiService {
 
     final imageObj = item['image'];
     final imageUrl = urlOf(imageObj, 'image_url');
+    // Only the object form states this outright. For a bare URL it has to be
+    // read off the path: the bank-wide fallbacks live under `generic/`, and
+    // dressing one up as this card's own artwork is what the card plate then
+    // gets wrong.
     final bool isSpecific = imageObj is Map
         ? imageObj['is_card_specific'] == true
-        : (imageUrl != null && !imageUrl.contains('bank-generic-cards'));
+        : (imageUrl != null &&
+              !imageUrl.contains('bank-generic-cards') &&
+              !imageUrl.contains('/generic/'));
+
+    // A group has no id of its own worth saving — the variant does. The
+    // default is used only so the row has a stable identity before the user
+    // has answered which one they hold.
+    final id =
+        item['id'] ??
+        item['card_id'] ??
+        item['default_variant_id'] ??
+        item['group_key'] ??
+        '';
 
     return {
-      'id': item['id'] ?? item['card_id'] ?? '',
+      'id': id,
+      'group_key': item['group_key'] ?? id,
       'bank_id': item['bank_id'] ?? item['bank_name'] ?? '',
+      'variants': ?variants,
+      'default_variant_id': ?item['default_variant_id'],
       'card': {
         'name': pick('card_name', 'name') ?? '',
         'issuer': pick('issuer', 'issuer') ?? '',
-        'network': pick('network', 'network') ?? '',
+        // The group states its networks as a list; the thumbnail wants one
+        // string, and the default variant's is the one it should draw.
+        'network':
+            pick('network', 'network') ??
+            (defaultVariant?['network'] as String?) ??
+            ((item['networks'] as List?)?.whereType<String>().join(' / ') ??
+                ''),
         'card_type': pick('card_type', 'card_type') ?? '',
         'variant': pick('variant', 'variant') ?? '',
       },
@@ -694,34 +748,6 @@ class ApiService {
   }
 
 
-  /// The payment-network catalog for the Add Cards picker.
-  ///
-  /// Public endpoint, so it works during registration before the token
-  /// exists. Returns null on failure; the picker falls back to letting the
-  /// card's own catalog network stand rather than blocking the add.
-  static Future<List<NetworkOption>?> getCardNetworks() async {
-    try {
-      final response = await _client.get(
-        Uri.parse('$baseUrl/card-networks'),
-        headers: _headers(),
-      );
-      final body = jsonDecode(response.body);
-      if (response.statusCode == 200 && body['success'] == true) {
-        final List<dynamic> list = body['data'] ?? const [];
-        return list
-            .whereType<Map>()
-            .map((n) => NetworkOption.fromJson(n.cast<String, dynamic>()))
-            .nonNulls
-            .toList();
-      }
-      LoggerService.warning(
-        'Fetch card networks failed: ${response.statusCode} - ${response.body}',
-      );
-    } catch (e, stack) {
-      LoggerService.error('Error fetching card networks', e, stack);
-    }
-    return null;
-  }
   // 16. Get user saved cards
   static Future<List<Map<String, dynamic>>?> getUserCards() async {
     try {

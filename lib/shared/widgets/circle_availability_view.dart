@@ -49,82 +49,170 @@ AvatarHue _hueFor(CircleHolder holder) {
   return AvatarHue.values[key.hashCode.abs() % AvatarHue.values.length];
 }
 
-/// One line for a feed row: overlapping faces plus who they are.
+/// One line for a feed row: overlapping faces plus the count behind them.
 ///
-/// The compact form deliberately names at most two people — a benefit five
-/// friends hold should read "rahul_k, priya +3", not push the card's own
-/// content off the screen.
+/// The count leads, not the names — "4 people in your circle can avail this"
+/// is the fact that makes a benefit worth opening, and it stays one short
+/// line no matter how many friends hold the card. The names are a tap away
+/// in [CircleAvailabilitySheet], since "who do I ask" is the next question
+/// but not the first one.
 class CircleAvailabilityStrip extends StatelessWidget {
   final CircleAvailability availability;
-  final VoidCallback? onTap;
 
-  const CircleAvailabilityStrip({
-    super.key,
-    required this.availability,
-    this.onTap,
-  });
+  const CircleAvailabilityStrip({super.key, required this.availability});
 
   static const int _maxFaces = 3;
-  static const int _maxNames = 2;
 
   @override
   Widget build(BuildContext context) {
     if (availability.isEmpty) return const SizedBox.shrink();
 
     final faces = availability.users.take(_maxFaces).toList();
-    final named = availability.users.take(_maxNames).toList();
-    final extra = availability.othersBeyond(named.length);
-    final who = named.map((u) => u.displayName).join(', ');
+    final line = '${availability.peopleLabel} in your circle can avail this';
 
-    final String line;
-    if (who.isEmpty) {
-      // The count arrived without names — permissions can hide the list
-      // while the number still stands.
-      line = '${availability.count} in your circle can avail this';
-    } else if (extra > 0) {
-      line = '$who +$extra in your circle can avail this';
-    } else {
-      line = '$who in your circle can avail this';
-    }
-
-    return InkWell(
-      onTap: onTap,
-      child: Row(
-        children: [
-          if (faces.isNotEmpty)
-            SizedBox(
-              height: 22,
-              width: 22 + (faces.length - 1) * 14,
-              child: Stack(
-                children: [
-                  for (int i = 0; i < faces.length; i++)
-                    Positioned(
-                      left: i * 14,
-                      child: Container(
-                        // A ring in the card colour, so overlapping faces
-                        // stay separable instead of merging into a blob.
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.surface,
-                        ),
-                        padding: const EdgeInsets.all(1),
-                        child: _HolderAvatar(
-                          holder: faces[i],
-                          size: 20,
-                          hue: _hueFor(faces[i]),
-                        ),
+    final row = Row(
+      children: [
+        if (faces.isNotEmpty)
+          SizedBox(
+            height: 22,
+            width: 22 + (faces.length - 1) * 14,
+            child: Stack(
+              children: [
+                for (int i = 0; i < faces.length; i++)
+                  Positioned(
+                    left: i * 14,
+                    child: Container(
+                      // A ring in the card colour, so overlapping faces
+                      // stay separable instead of merging into a blob.
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: AppColors.surface,
+                      ),
+                      padding: const EdgeInsets.all(1),
+                      child: _HolderAvatar(
+                        holder: faces[i],
+                        size: 20,
+                        hue: _hueFor(faces[i]),
                       ),
                     ),
-                ],
+                  ),
+              ],
+            ),
+          ),
+        const SizedBox(width: AppSpacing.sm),
+        Flexible(
+          child: Text(
+            line,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppText.sans(11.5, color: AppColors.teal),
+          ),
+        ),
+        // Only a strip that can actually name someone advertises a tap.
+        if (availability.hasNames)
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 15,
+            color: AppColors.teal,
+          ),
+      ],
+    );
+
+    // With no names to show there is nothing to open, so the tap is left to
+    // the card underneath, which opens the benefit itself.
+    if (!availability.hasNames) return row;
+
+    return InkWell(
+      onTap: () => CircleAvailabilitySheet.show(context, availability),
+      child: row,
+    );
+  }
+}
+
+/// The names behind the count, as a bottom sheet.
+///
+/// Opened from [CircleAvailabilityStrip] in the feed, where the reader has
+/// seen "4 people can avail this" and wants to know which four. Same content
+/// as the detail page's panel, so the answer doesn't change with the route
+/// the reader took to it.
+class CircleAvailabilitySheet extends StatelessWidget {
+  final CircleAvailability availability;
+
+  const CircleAvailabilitySheet({super.key, required this.availability});
+
+  static Future<void> show(
+    BuildContext context,
+    CircleAvailability availability,
+  ) {
+    if (!availability.hasNames) return Future<void>.value();
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.background,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => CircleAvailabilitySheet(availability: availability),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final users = availability.users;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.xl,
+        AppSpacing.mdLg,
+        AppSpacing.xl,
+        AppSpacing.xl,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 38,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
               ),
             ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              line,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppText.sans(11.5, color: AppColors.teal),
+          ),
+          const SizedBox(height: AppSpacing.xl),
+          Text(
+            'Who can avail this',
+            style: AppText.sans(
+              19,
+              weight: FontWeight.w500,
+              color: AppColors.text,
+              letterSpacing: -0.3,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            '${availability.peopleLabel} in your circle',
+            style: AppText.sans(12.5, color: AppColors.textDim),
+          ),
+          const SizedBox(height: AppSpacing.lg),
+          // A circle large enough to fill the screen scrolls inside the
+          // sheet rather than pushing itself past the top of it.
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.5,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (int i = 0; i < users.length; i++) ...[
+                    if (i > 0) const SizedBox(height: AppSpacing.mdLg),
+                    _HolderRow(holder: users[i]),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
@@ -179,9 +267,7 @@ class CircleAvailabilityPanel extends StatelessWidget {
             // A count with no list: the people are there, their cards are
             // not shared. Saying so beats an empty panel.
             Text(
-              '${availability.count} '
-              '${availability.count == 1 ? 'person' : 'people'} you follow '
-              'hold a card for this.',
+              '${availability.peopleLabel} you follow hold a card for this.',
               style: AppText.sans(12.5, color: AppColors.textDim, height: 1.5),
             )
           else

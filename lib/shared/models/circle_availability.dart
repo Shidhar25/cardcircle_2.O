@@ -23,11 +23,14 @@ class CircleAvailability {
 
   bool get isEmpty => count == 0 && users.isEmpty;
 
-  /// Friends beyond the ones a compact summary names.
-  int othersBeyond(int shown) {
-    final extra = count - shown;
-    return extra > 0 ? extra : 0;
-  }
+  /// "1 person" / "4 people" — the count as the reader should read it,
+  /// kept here so every surface that states it pluralises the same way.
+  String get peopleLabel => '$count ${count == 1 ? 'person' : 'people'}';
+
+  /// Whether the names behind the count can actually be shown. A count can
+  /// arrive without a list when the friends' cards aren't shared, and there
+  /// is nothing to open in that case.
+  bool get hasNames => users.isNotEmpty;
 
   static CircleAvailability parse(dynamic raw) {
     if (raw is! Map) return none;

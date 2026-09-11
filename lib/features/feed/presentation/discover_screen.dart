@@ -597,12 +597,12 @@ class _HackRow extends StatelessWidget {
                   ),
                   // Who in the circle could actually use this. Reason enough
                   // to open a benefit the reader holds no card for, so it
-                  // sits in the tap area with the title and blurb.
+                  // sits in the tap area with the title and blurb — tapping
+                  // the strip itself names the people instead.
                   if (!hack.circleAvailability.isEmpty) ...[
                     const SizedBox(height: AppSpacing.sm),
                     CircleAvailabilityStrip(
                       availability: hack.circleAvailability,
-                      onTap: onOpen,
                     ),
                   ],
                 ],

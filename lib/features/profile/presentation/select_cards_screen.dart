@@ -4,9 +4,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/card_material.dart';
-import '../../../shared/models/network_catalog.dart';
+import '../../../shared/models/card_variant.dart';
 import '../../../shared/widgets/card_plate.dart';
-import '../../../shared/widgets/network_picker_sheet.dart';
+import '../../../shared/widgets/card_variant_picker_sheet.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -32,13 +32,17 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
   bool _fromProfile = false;
   bool _initialized = false;
 
-  final List<Map<String, dynamic>> _selectedCards = [];
+  /// The add payload per selected card, keyed by the catalog group it came
+  /// from.
+  ///
+  /// Keyed by group and not by `card_id` because the id in the payload is the
+  /// chosen *variant's* — picking a different network for the same product
+  /// changes it, while the row the user tapped stays the same row.
+  final Map<String, Map<String, dynamic>> _selected = {};
 
-  /// Server-owned network catalog for the picker, and the choice made for
-  /// each selected card keyed by `card_id` — the row prints it back so the
-  /// user can see what they answered without reopening the sheet.
-  List<NetworkOption> _networks = [];
-  final Map<String, NetworkChoice> _choices = {};
+  /// The variant answered for each selected group, so the row can print it
+  /// back without the user reopening the sheet.
+  final Map<String, CardVariantOption> _choices = {};
 
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
@@ -66,14 +70,6 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       if (next != _query) setState(() => _query = next);
     });
     _fetchBanks();
-    _fetchNetworks();
-  }
-
-  Future<void> _fetchNetworks() async {
-    final list = await ApiService.getCardNetworks();
-    if (mounted && list != null && list.isNotEmpty) {
-      setState(() => _networks = list);
-    }
   }
 
   @override
@@ -142,66 +138,78 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
     }
   }
 
-  bool _isCardSelected(String cardId) {
-    return _selectedCards.any((c) => c['card_id'] == cardId);
-  }
+  /// A catalog row's stable identity. The grouped catalog names it; older
+  /// flat payloads have only the card's own id, which is as stable.
+  static String _groupKeyOf(Map<String, dynamic> card) =>
+      (card['group_key'] ?? card['id'] ?? '').toString();
+
+  bool _isCardSelected(Map<String, dynamic> card) =>
+      _selected.containsKey(_groupKeyOf(card));
 
   /// Selects or deselects a card.
   ///
-  /// Every add goes through the network picker first: the catalog knows the
-  /// product but not which network *this* user's copy of it was issued on,
-  /// and that's the one thing the sheet asks. Backing out of the sheet
-  /// leaves the card unselected — an add with no answer isn't wanted.
+  /// The catalog groups a product by name, so "HDFC Millennia" is one row
+  /// covering the Visa Signature, Mastercard and Diners Club cards it was
+  /// issued as. Those are different cards with different benefits, and only
+  /// the user knows which one is in their wallet — so an add with more than
+  /// one variant goes through the picker first, and backing out of it leaves
+  /// the card unselected. A single-variant card has nothing to ask.
   ///
-  /// When the catalog hasn't loaded (offline, or an older server without
-  /// `/card-networks`) the sheet is skipped rather than blocking the add,
-  /// and the card's own catalog network is sent as before.
+  /// What gets saved is the chosen variant's own `card_id`. The group's id is
+  /// a display handle, not a card anyone holds.
   Future<void> _toggleCard(Map<String, dynamic> card) async {
-    final cardId = card['id'] ?? '';
+    final groupKey = _groupKeyOf(card);
     final bankId = card['bank_id'] ?? '';
     final cardInfo = (card['card'] as Map?)?.cast<String, dynamic>() ?? {};
     final cardName = cardInfo['name'] ?? '';
-    final catalogNetwork = cardInfo['network'] as String?;
 
-    if (_isCardSelected(cardId)) {
+    if (_selected.containsKey(groupKey)) {
       setState(() {
-        _selectedCards.removeWhere((c) => c['card_id'] == cardId);
-        _choices.remove(cardId);
+        _selected.remove(groupKey);
+        _choices.remove(groupKey);
       });
       return;
     }
 
-    NetworkChoice? choice;
-    if (_networks.isNotEmpty) {
-      choice = await NetworkPickerSheet.show(
+    final variants = CardVariantOption.listFrom(card['variants']);
+    CardVariantOption? choice;
+    if (variants.isNotEmpty) {
+      choice = await CardVariantPickerSheet.show(
         context,
         cardName: cardName,
-        networks: _networks,
-        initialNetwork: catalogNetwork,
+        variants: variants,
+        initialCardId: card['default_variant_id']?.toString(),
       );
       if (choice == null) return;
     }
 
     if (!mounted) return;
     setState(() {
-      if (choice != null) _choices[cardId] = choice;
-      _selectedCards.add({
-        'card_id': cardId,
+      if (choice != null) _choices[groupKey] = choice;
+      _selected[groupKey] = {
+        // Falls back to the row's own id for a payload with no variants at
+        // all, which is what the older flat catalog returned.
+        'card_id': choice?.cardId ?? card['id'] ?? '',
         'bank_name': bankId,
         'card_name': cardName,
         'nickname': cardName,
         'is_primary': false,
-        if (choice != null) 'network': choice.network,
-        if (choice?.variant != null) 'variant': choice!.variant,
-      });
+        if (choice != null && choice.network.isNotEmpty)
+          'network': choice.network
+        else if ((cardInfo['network'] as String?)?.isNotEmpty == true)
+          'network': cardInfo['network'],
+        if (choice?.networkVariant != null)
+          'network_variant': choice!.networkVariant,
+        if (choice?.cardVariant != null) 'card_variant': choice!.cardVariant,
+      };
     });
   }
 
   Future<void> _handleFinish() async {
-    if (_saving || _selectedCards.isEmpty) return;
+    if (_saving || _selected.isEmpty) return;
 
     setState(() => _saving = true);
-    final result = await ApiService.addUserCards(_selectedCards);
+    final result = await ApiService.addUserCards(_selected.values.toList());
     if (!mounted) return;
     setState(() => _saving = false);
 
@@ -419,10 +427,10 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                               itemBuilder: (context, index) => _CardRow(
                                 card: _visibleCards[index],
                                 isSelected: _isCardSelected(
-                                  _visibleCards[index]['id'] ?? '',
+                                  _visibleCards[index],
                                 ),
                                 choice:
-                                    _choices[_visibleCards[index]['id'] ?? ''],
+                                    _choices[_groupKeyOf(_visibleCards[index])],
                                 onTap: () => _toggleCard(_visibleCards[index]),
                               ),
                             )),
@@ -451,7 +459,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         MonoLabel(
-                          '${_selectedCards.length} CARD${_selectedCards.length == 1 ? '' : 'S'} ADDED',
+                          '${_selected.length} CARD${_selected.length == 1 ? '' : 'S'} ADDED',
                           size: 10,
                           letterSpacing: 1.3,
                           color: AppColors.textFaint,
@@ -462,7 +470,7 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                     GoldButton(
                       label: 'Enter CardCircle',
                       icon: Icons.arrow_forward,
-                      enabled: _selectedCards.isNotEmpty,
+                      enabled: _selected.isNotEmpty,
                       loading: _saving,
                       onTap: _handleFinish,
                     ),
@@ -481,8 +489,8 @@ class _CardRow extends StatelessWidget {
   final Map<String, dynamic> card;
   final bool isSelected;
 
-  /// The network/variant answered for this card, when it's selected.
-  final NetworkChoice? choice;
+  /// The variant answered for this card, when it's selected.
+  final CardVariantOption? choice;
   final VoidCallback onTap;
 
   const _CardRow({
@@ -519,6 +527,24 @@ class _CardRow extends StatelessWidget {
     final String? networkLogoUrl = url('network_logo');
 
     final String bankId = (card['bank_id'] as String?) ?? '';
+
+    // Before the user answers, the row says what the product comes on —
+    // "Visa · Mastercard · Diners Club" is the reason the sheet is about to
+    // ask. After, it says what they picked. A single-variant card never
+    // asked, so it keeps the issuer it always showed.
+    final variants = CardVariantOption.listFrom(card['variants']);
+    final String subtitle;
+    if (choice != null) {
+      subtitle = choice!.label;
+    } else if (variants.length > 1) {
+      subtitle = variants
+          .map((v) => v.network)
+          .where((n) => n.isNotEmpty)
+          .toSet()
+          .join(' · ');
+    } else {
+      subtitle = issuer;
+    }
 
     return OutlinedSurface(
       onTap: onTap,
@@ -560,11 +586,13 @@ class _CardRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 MonoLabel(
-                  choice?.label ?? issuer,
+                  subtitle.isEmpty ? issuer : subtitle,
                   size: 9.5,
                   letterSpacing: 1.1,
                   color: choice == null ? AppColors.textFaint : AppColors.gold,
                   uppercase: false,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
