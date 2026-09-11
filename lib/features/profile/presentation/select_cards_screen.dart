@@ -4,7 +4,9 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/card_material.dart';
+import '../../../shared/models/network_catalog.dart';
 import '../../../shared/widgets/card_plate.dart';
+import '../../../shared/widgets/network_picker_sheet.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -31,6 +33,13 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
   bool _initialized = false;
 
   final List<Map<String, dynamic>> _selectedCards = [];
+
+  /// Server-owned network catalog for the picker, and the choice made for
+  /// each selected card keyed by `card_id` — the row prints it back so the
+  /// user can see what they answered without reopening the sheet.
+  List<NetworkOption> _networks = [];
+  final Map<String, NetworkChoice> _choices = {};
+
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
 
@@ -57,6 +66,14 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       if (next != _query) setState(() => _query = next);
     });
     _fetchBanks();
+    _fetchNetworks();
+  }
+
+  Future<void> _fetchNetworks() async {
+    final list = await ApiService.getCardNetworks();
+    if (mounted && list != null && list.isNotEmpty) {
+      setState(() => _networks = list);
+    }
   }
 
   @override
@@ -129,24 +146,54 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
     return _selectedCards.any((c) => c['card_id'] == cardId);
   }
 
-  void _toggleCard(Map<String, dynamic> card) {
+  /// Selects or deselects a card.
+  ///
+  /// Every add goes through the network picker first: the catalog knows the
+  /// product but not which network *this* user's copy of it was issued on,
+  /// and that's the one thing the sheet asks. Backing out of the sheet
+  /// leaves the card unselected — an add with no answer isn't wanted.
+  ///
+  /// When the catalog hasn't loaded (offline, or an older server without
+  /// `/card-networks`) the sheet is skipped rather than blocking the add,
+  /// and the card's own catalog network is sent as before.
+  Future<void> _toggleCard(Map<String, dynamic> card) async {
     final cardId = card['id'] ?? '';
     final bankId = card['bank_id'] ?? '';
     final cardInfo = (card['card'] as Map?)?.cast<String, dynamic>() ?? {};
     final cardName = cardInfo['name'] ?? '';
+    final catalogNetwork = cardInfo['network'] as String?;
 
-    setState(() {
-      if (_isCardSelected(cardId)) {
+    if (_isCardSelected(cardId)) {
+      setState(() {
         _selectedCards.removeWhere((c) => c['card_id'] == cardId);
-      } else {
-        _selectedCards.add({
-          'card_id': cardId,
-          'bank_name': bankId,
-          'card_name': cardName,
-          'nickname': cardName,
-          'is_primary': false,
-        });
-      }
+        _choices.remove(cardId);
+      });
+      return;
+    }
+
+    NetworkChoice? choice;
+    if (_networks.isNotEmpty) {
+      choice = await NetworkPickerSheet.show(
+        context,
+        cardName: cardName,
+        networks: _networks,
+        initialNetwork: catalogNetwork,
+      );
+      if (choice == null) return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (choice != null) _choices[cardId] = choice;
+      _selectedCards.add({
+        'card_id': cardId,
+        'bank_name': bankId,
+        'card_name': cardName,
+        'nickname': cardName,
+        'is_primary': false,
+        if (choice != null) 'network': choice.network,
+        if (choice?.variant != null) 'variant': choice!.variant,
+      });
     });
   }
 
@@ -374,6 +421,8 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                                 isSelected: _isCardSelected(
                                   _visibleCards[index]['id'] ?? '',
                                 ),
+                                choice:
+                                    _choices[_visibleCards[index]['id'] ?? ''],
                                 onTap: () => _toggleCard(_visibleCards[index]),
                               ),
                             )),
@@ -431,11 +480,15 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
 class _CardRow extends StatelessWidget {
   final Map<String, dynamic> card;
   final bool isSelected;
+
+  /// The network/variant answered for this card, when it's selected.
+  final NetworkChoice? choice;
   final VoidCallback onTap;
 
   const _CardRow({
     required this.card,
     required this.isSelected,
+    required this.choice,
     required this.onTap,
   });
 
@@ -507,10 +560,10 @@ class _CardRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 MonoLabel(
-                  issuer,
+                  choice?.label ?? issuer,
                   size: 9.5,
                   letterSpacing: 1.1,
-                  color: AppColors.textFaint,
+                  color: choice == null ? AppColors.textFaint : AppColors.gold,
                   uppercase: false,
                 ),
               ],

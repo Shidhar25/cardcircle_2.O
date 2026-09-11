@@ -2,7 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
+import 'auth_http_client.dart';
+import 'session_service.dart';
 import '../../shared/models/feedback_question.dart';
+import '../../shared/models/network_catalog.dart';
 import '../../shared/models/paged_result.dart';
 import 'local_storage_service.dart';
 import 'logger_service.dart';
@@ -17,6 +20,25 @@ class ApiService {
 
   static String? _accessToken;
   static String? _refreshToken;
+
+  /// Every request goes through this client, so an access token that
+  /// expired mid-session is renewed and the request replayed without the
+  /// calling screen ever seeing the 401. Requests without an Authorization
+  /// header — login, OTP, the refresh call itself — pass straight through.
+  static final http.Client _client = AuthHttpClient(
+    refresh: refreshToken,
+    authHeader: () => _accessToken == null ? null : 'Bearer $_accessToken',
+    onSessionExpired: _endSession,
+  );
+
+  /// Drops the stored tokens and tells the app to ask for a sign-in.
+  ///
+  /// [refreshToken] already clears them when the server rejects the refresh;
+  /// this also covers the case where there was no refresh token to try.
+  static void _endSession() {
+    logout();
+    SessionService.expire();
+  }
 
   static Future<void> init() async {
     _accessToken = LocalStorageService.getString('@auth/accessToken');
@@ -44,7 +66,7 @@ class ApiService {
   static Future<Map<String, dynamic>?> getBootstrapConfig() async {
     try {
       LoggerService.info('Fetching bootstrap config from backend...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/bootstrap/config'),
         headers: _headers(),
       );
@@ -76,7 +98,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Sending OTP to $phoneNumber for $purpose...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/otp/send'),
         headers: _headers(),
         body: jsonEncode({'phoneNumber': phoneNumber, 'purpose': purpose}),
@@ -116,7 +138,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Verifying OTP for request $requestId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/otp/verify'),
         headers: _headers(),
         body: jsonEncode({'requestId': requestId, 'otp': otp}),
@@ -152,6 +174,31 @@ class ApiService {
       _refreshToken = refresh;
       await LocalStorageService.setString('@auth/refreshToken', refresh);
     }
+    // There is a live session again, so a future expiry is worth announcing.
+    SessionService.reset();
+  }
+
+  /// Whether the stored session can still be used, renewing it if needed.
+  ///
+  /// Called from the splash before routing to Home. Without it a user whose
+  /// access token expired while the app was closed lands on Home and watches
+  /// every panel fail at once before the first 401 bounces them out.
+  ///
+  /// Returns false only when there is nothing to sign in with. An
+  /// unreachable server leaves the existing tokens alone and answers true,
+  /// so a cold start offline still opens the app.
+  static Future<bool> ensureSession() async {
+    if (_refreshToken == null || _refreshToken!.isEmpty) {
+      return _accessToken != null && _accessToken!.isNotEmpty;
+    }
+    if (_accessToken != null && _accessToken!.isNotEmpty) {
+      // Left to the interceptor: if this token has expired, the first real
+      // request refreshes it, which costs nothing on the happy path.
+      return true;
+    }
+    // Only a hard rejection sends the user to login; an unreachable server
+    // is not proof the session is over.
+    return await refreshToken() != RefreshResult.rejected;
   }
 
   // 4. Resend OTP
@@ -161,7 +208,7 @@ class ApiService {
   static Future<OtpSendResult> resendOtp(String requestId) async {
     try {
       LoggerService.info('Resending OTP for request $requestId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/otp/resend'),
         headers: _headers(),
         body: jsonEncode({'requestId': requestId}),
@@ -189,10 +236,25 @@ class ApiService {
   }
 
   // 5. Refresh token
-  static Future<bool> refreshToken() async {
-    if (_refreshToken == null) return false;
+  ///
+  /// Called on demand by [AuthHttpClient] when a request comes back 401,
+  /// and by [ensureSession] at startup.
+  ///
+  /// [RefreshResult.rejected] — no refresh token, or the server refused it —
+  /// is the "sign in again" case, and the stored tokens are dropped so
+  /// nothing retries with credentials known to be dead. A network failure is
+  /// deliberately *not* that: it answers [RefreshResult.unreachable] and
+  /// leaves the tokens alone, so a user who walked into a tunnel keeps their
+  /// session.
+  static Future<RefreshResult> refreshToken() async {
+    if (_refreshToken == null || _refreshToken!.isEmpty) {
+      return RefreshResult.rejected;
+    }
     try {
       LoggerService.info('Refreshing access token...');
+      // Intentionally the bare client: this request carries no
+      // Authorization header, so routing it through the interceptor could
+      // only ever recurse.
       final response = await http.post(
         Uri.parse('$baseUrl/auth/refresh-token'),
         headers: _headers(),
@@ -200,28 +262,38 @@ class ApiService {
       );
       final body = jsonDecode(response.body);
       if (response.statusCode == 200 && body['success'] == true) {
-        final data = body['data'];
-        _accessToken = data['accessToken'];
-        await LocalStorageService.setString('@auth/accessToken', _accessToken!);
+        // Stored through the same path as sign-in, so a server that rotates
+        // the refresh token on use keeps working — writing only the access
+        // token would leave the next refresh holding a spent one.
+        await _storeTokens(body['data']);
+        if (_accessToken == null || _accessToken!.isEmpty) {
+          return RefreshResult.rejected;
+        }
         LoggerService.info('Access token refreshed successfully.');
-        return true;
+        return RefreshResult.renewed;
       }
       LoggerService.warning(
-        'Refresh token failed: ${body['message'] ?? response.body}',
+        'Refresh token failed: ${body is Map ? body['message'] : response.body}',
       );
-      // Clear invalid tokens
+      // A 5xx is the server having a bad minute, not a verdict on this
+      // token — retryable, so the session survives it.
+      if (response.statusCode >= 500) return RefreshResult.unreachable;
+
+      // Anything else means the refresh token is spent or revoked; drop it
+      // rather than retrying with it forever.
       await logout();
+      return RefreshResult.rejected;
     } catch (e, stack) {
       LoggerService.error('Error refreshing token', e, stack);
+      return RefreshResult.unreachable;
     }
-    return false;
   }
 
   // 6. Verify token
   static Future<bool> verifyToken(String token) async {
     try {
       LoggerService.info('Verifying access token...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/auth/verify-token'),
         headers: _headers(),
         body: jsonEncode({'accessToken': token}),
@@ -240,7 +312,7 @@ class ApiService {
   // 7. Check if username is unique
   static Future<bool> checkUsername(String username) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/user/check-username'),
         headers: _headers(),
         body: jsonEncode({'username': username}),
@@ -271,7 +343,7 @@ class ApiService {
   }) async {
     try {
       LoggerService.info('Creating profile for $username...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/user/create-profile'),
         headers: _headers(),
         body: jsonEncode({
@@ -297,7 +369,7 @@ class ApiService {
   static Future<Map<String, dynamic>?> getUserProfile() async {
     try {
       LoggerService.info('Fetching user profile...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/user/profile'),
         headers: _headers(requireAuth: true),
       );
@@ -323,7 +395,7 @@ class ApiService {
   }) async {
     try {
       LoggerService.info('Updating user profile...');
-      final response = await http.put(
+      final response = await _client.put(
         Uri.parse('$baseUrl/user/profile'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({
@@ -362,7 +434,7 @@ class ApiService {
     required bool auth,
   }) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(url),
         headers: _headers(requireAuth: auth),
       );
@@ -395,7 +467,7 @@ class ApiService {
     List<String> categoryIds,
   ) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/category/tag'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'categoryIds': categoryIds}),
@@ -443,7 +515,7 @@ class ApiService {
   // 13. Get all banks (catalog)
   static Future<List<Map<String, dynamic>>?> getBanks() async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$cardsCatalogBaseUrl/banks'),
         headers: _headers(),
       );
@@ -518,7 +590,7 @@ class ApiService {
     String bankName,
   ) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse(
           '$baseUrl/user/cards/browse?banks=${Uri.encodeComponent(bankName)}&limit=200',
         ),
@@ -607,7 +679,7 @@ class ApiService {
     List<Map<String, dynamic>> cards,
   ) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/user/cards'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'cards': cards}),
@@ -621,11 +693,40 @@ class ApiService {
     }
   }
 
+
+  /// The payment-network catalog for the Add Cards picker.
+  ///
+  /// Public endpoint, so it works during registration before the token
+  /// exists. Returns null on failure; the picker falls back to letting the
+  /// card's own catalog network stand rather than blocking the add.
+  static Future<List<NetworkOption>?> getCardNetworks() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/card-networks'),
+        headers: _headers(),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final List<dynamic> list = body['data'] ?? const [];
+        return list
+            .whereType<Map>()
+            .map((n) => NetworkOption.fromJson(n.cast<String, dynamic>()))
+            .nonNulls
+            .toList();
+      }
+      LoggerService.warning(
+        'Fetch card networks failed: ${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error fetching card networks', e, stack);
+    }
+    return null;
+  }
   // 16. Get user saved cards
   static Future<List<Map<String, dynamic>>?> getUserCards() async {
     try {
       LoggerService.info('Fetching saved user cards...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/user/cards'),
         headers: _headers(requireAuth: true),
       );
@@ -644,7 +745,7 @@ class ApiService {
   static Future<Map<String, dynamic>?> getDashboard() async {
     try {
       LoggerService.info('Fetching dashboard details...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/dashboard'),
         headers: _headers(requireAuth: true),
       );
@@ -664,7 +765,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Syncing contacts...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/user/contacts/sync'),
         headers: _headers(requireAuth: true),
         body: jsonEncode(payload),
@@ -683,7 +784,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getContactDirectory() async {
     try {
       LoggerService.info('Fetching matched contacts directory...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/user/contacts/directory'),
         headers: _headers(requireAuth: true),
       );
@@ -704,7 +805,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Deleting user cards: $userCardIds');
-      final response = await http.delete(
+      final response = await _client.delete(
         Uri.parse('$baseUrl/user/cards'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'userCardIds': userCardIds}),
@@ -731,7 +832,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Following user $recipientId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({"message": "Hi, I would like to follow you"}),
@@ -751,7 +852,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Unfollowing user $recipientId...');
-      final response = await http.delete(
+      final response = await _client.delete(
         Uri.parse('$baseUrl/follow/requests/recipients/$recipientId'),
         headers: _headers(requireAuth: true),
       );
@@ -768,7 +869,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getIncomingFollowRequests() async {
     try {
       LoggerService.info('Fetching incoming follow requests...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/requests/incoming'),
         headers: _headers(requireAuth: true),
       );
@@ -787,7 +888,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getOutgoingFollowRequests() async {
     try {
       LoggerService.info('Fetching outgoing follow requests...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/requests/outgoing'),
         headers: _headers(requireAuth: true),
       );
@@ -809,7 +910,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Approving follow request $followId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/follow/requests/$followId/approve'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({"allowed_card_ids": allowedCardIds}),
@@ -829,7 +930,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Rejecting follow request $followId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/follow/requests/$followId/reject'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({}),
@@ -861,7 +962,7 @@ class ApiService {
     String? hackId,
   }) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/feedback/$context/prompt').replace(
           queryParameters: {
             if (hackId != null && hackId.isNotEmpty) 'hack_id': hackId,
@@ -898,7 +999,7 @@ class ApiService {
   }) async {
     try {
       LoggerService.info('Submitting ${answers.length} feedback answers.');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/feedback/$context/responses'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({
@@ -929,7 +1030,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Rating hack $hackId: $rating');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/hacks/$hackId/rate'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'rating': rating}),
@@ -957,7 +1058,7 @@ class ApiService {
   static Future<ApiResult<Map<String, dynamic>>> createInviteLink() async {
     try {
       LoggerService.info('Creating invite link...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/invites'),
         headers: _headers(requireAuth: true),
       );
@@ -983,7 +1084,7 @@ class ApiService {
   ) async {
     try {
       LoggerService.info('Inviting contact $contactId...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/user/contacts/$contactId/invite'),
         headers: _headers(requireAuth: true),
       );
@@ -1002,7 +1103,7 @@ class ApiService {
     String followId,
   ) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/following/$followId/cards'),
         headers: _headers(requireAuth: true),
       );
@@ -1029,7 +1130,7 @@ class ApiService {
   /// `data.permissions` with an `is_allowed` flag per row.
   static Future<List<String>?> getFollowPermissions(String followId) async {
     try {
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/permissions/$followId'),
         headers: _headers(requireAuth: true),
       );
@@ -1060,7 +1161,7 @@ class ApiService {
     List<String> allowedCardIds,
   ) async {
     try {
-      final response = await http.put(
+      final response = await _client.put(
         Uri.parse('$baseUrl/follow/permissions/$followId'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({'allowed_card_ids': allowedCardIds}),
@@ -1078,7 +1179,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getFollowers() async {
     try {
       LoggerService.info('Fetching followers list...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/followers'),
         headers: _headers(requireAuth: true),
       );
@@ -1097,7 +1198,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getFollowing() async {
     try {
       LoggerService.info('Fetching following list...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/follow/following'),
         headers: _headers(requireAuth: true),
       );
@@ -1178,7 +1279,7 @@ class ApiService {
         'limit': '$limit',
         ...extraQuery,
       };
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/hacks/$path').replace(queryParameters: query),
         headers: _headers(requireAuth: true),
       );
@@ -1210,7 +1311,7 @@ class ApiService {
   }) async {
     try {
       LoggerService.info('Registering push token...');
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/push/tokens/register'),
         headers: _headers(requireAuth: true),
         body: jsonEncode({
@@ -1240,7 +1341,7 @@ class ApiService {
   /// returns, and a failure here is not worth interrupting the reader over.
   static Future<void> markNotificationRead(String notificationId) async {
     try {
-      await http.post(
+      await _client.post(
         Uri.parse('$baseUrl/push/notifications/$notificationId/read'),
         headers: _headers(requireAuth: true),
       );
@@ -1252,7 +1353,7 @@ class ApiService {
   static Future<List<Map<String, dynamic>>?> getNotifications() async {
     try {
       LoggerService.info('Fetching push notifications...');
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('$baseUrl/push/notifications'),
         headers: _headers(requireAuth: true),
       );

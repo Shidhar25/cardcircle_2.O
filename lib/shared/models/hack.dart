@@ -1,3 +1,4 @@
+import 'circle_availability.dart';
 import 'credit_card.dart';
 import 'feedback_question.dart';
 import 'hack_rating.dart';
@@ -63,6 +64,14 @@ class Hack {
   /// endpoint still needs calling, and collapsing it to
   /// [FeedbackPrompt.none] would silently stop ever asking on those paths.
   final FeedbackPrompt? feedbackPrompt;
+
+  /// Friends who hold a card this benefit works on.
+  ///
+  /// Defaults to [CircleAvailability.none] rather than null: a payload
+  /// without the field means "nobody to show", and every reader would have
+  /// had to null-check for a state that renders the same as empty.
+  final CircleAvailability circleAvailability;
+
   final String availedby;
   final String circledetail;
   final String image;
@@ -86,6 +95,7 @@ class Hack {
     this.circleRating = HackRating.none,
     this.myRating,
     this.feedbackPrompt,
+    this.circleAvailability = CircleAvailability.none,
     required this.availedby,
     this.circledetail = '',
     this.image = '',
@@ -153,6 +163,7 @@ class Hack {
     circleRating: circleRating ?? this.circleRating,
     myRating: clearMyRatingWhenNull ? myRating : (myRating ?? this.myRating),
     feedbackPrompt: feedbackPrompt ?? this.feedbackPrompt,
+    circleAvailability: circleAvailability,
     availedby: availedby,
     circledetail: circledetail,
     image: image,
@@ -225,6 +236,7 @@ class Hack {
               (json['feedback_prompt'] as Map?)?.cast<String, dynamic>(),
             )
           : null,
+      circleAvailability: CircleAvailability.parse(json['circle_availability']),
       availedby: json['availedby']?.toString() ?? '',
       circledetail: json['circledetail']?.toString() ?? '',
       image: json['image']?.toString() ?? '',

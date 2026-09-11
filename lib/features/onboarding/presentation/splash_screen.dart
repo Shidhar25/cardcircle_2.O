@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/config/remote_config.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/services/logger_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/widgets/neo_pop_button.dart';
@@ -131,6 +132,13 @@ class _SplashScreenState extends State<SplashScreen>
       Navigator.pushReplacementNamed(context, '/onboarding');
     } else if (!state.hasProfile) {
       LoggerService.info('Redirecting to login.');
+      Navigator.pushReplacementNamed(context, '/login');
+    } else if (!await ApiService.ensureSession()) {
+      // A profile with no usable token: the session expired while the app
+      // was closed. Better to ask for a sign-in here than to open Home and
+      // let every panel fail at once.
+      LoggerService.info('Stored session is no longer usable — to login.');
+      if (!mounted) return;
       Navigator.pushReplacementNamed(context, '/login');
     } else {
       LoggerService.info('Redirecting to home.');
