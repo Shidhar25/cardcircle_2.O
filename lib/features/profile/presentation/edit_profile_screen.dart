@@ -35,6 +35,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     _dobController = TextEditingController(text: profile?.dob ?? '');
 
     _dobController.addListener(_formatDOBListener);
+
+    // "Save changes" is enabled from the field contents, which are read in
+    // build(). Without these the button's state was decided once, on the
+    // values the screen opened with, and never again — so a profile with no
+    // email on file opened with the button dead and typing one in did not
+    // bring it back. Nothing else in the screen rebuilds on a keystroke.
+    _nameController.addListener(_onFieldChanged);
+    _emailController.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    if (mounted) setState(() {});
   }
 
   void _formatDOBListener() {
@@ -92,11 +104,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     });
 
     final dobFormatted = _formatDobForBackend(dob);
+    // No picture field on this screen, so none is sent. Sending an empty one
+    // told the server to clear whatever the user already had.
     final response = await ApiService.updateUserProfile(
       name: name,
       email: email,
       dateOfBirth: dobFormatted,
-      profilePictureUrl: '',
     );
 
     setState(() {

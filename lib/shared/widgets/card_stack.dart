@@ -99,7 +99,6 @@ class CardFacePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return CardPlate(
       artworkUrl: card.imageUrl,
-      isCardSpecific: card.isCardSpecific,
       bankLogoUrl: card.bankLogoUrl,
       name: card.name,
       networkLogoUrl: card.networkLogoUrl,

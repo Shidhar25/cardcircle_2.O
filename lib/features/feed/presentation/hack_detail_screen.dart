@@ -25,6 +25,17 @@ import '../../../shared/widgets/rating_stars.dart';
 /// it keeps roughly the same proportion of the screen on a small phone and
 /// a tall one. The title sits below it rather than overlaid, which leaves
 /// the whole hero to the image.
+/// "A", "A and B", "A, B and C" — a list of card names read as a sentence.
+///
+/// The page has the width to name every matching card, so it does, but a
+/// comma-joined tail ("Works with A, B, C") reads as truncated rather than
+/// finished.
+String _andList(List<String> names) {
+  if (names.length == 1) return names.first;
+  if (names.length == 2) return '${names.first} and ${names.last}';
+  return '${names.sublist(0, names.length - 1).join(', ')} and ${names.last}';
+}
+
 class HackDetailScreen extends StatefulWidget {
   const HackDetailScreen({super.key});
 
@@ -288,10 +299,10 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                               const SizedBox(width: 7),
                               Expanded(
                                 child: Text(
-                                  'Works with ${myCardNames.join(', ')}',
+                                  'Works with ${_andList(myCardNames)}',
                                   style: AppText.sans(
                                     12,
-                                    color: AppColors.textDim,
+                                    color: AppColors.textMuted,
                                     height: 1.4,
                                   ),
                                 ),
@@ -322,7 +333,7 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                       'YOU SAVE',
                                       size: 8.5,
                                       letterSpacing: 1.4,
-                                      color: AppColors.textFaint,
+                                      color: AppColors.textDim,
                                     ),
                                     const SizedBox(height: 5.6),
                                     // `savings` is sometimes a figure ("5%")
@@ -363,7 +374,7 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                       'YOUR CIRCLE',
                                       size: 8.5,
                                       letterSpacing: 1.4,
-                                      color: AppColors.textFaint,
+                                      color: AppColors.textDim,
                                     ),
                                     const SizedBox(height: 5.6),
                                     // The circle's real score. This box used
@@ -402,7 +413,7 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                             'HOW TO AVAIL THIS BENEFIT',
                             size: 9.5,
                             letterSpacing: 1.8,
-                            color: AppColors.textFaint,
+                            color: AppColors.textDim,
                           ),
                           const SizedBox(height: AppSpacing.mdLg),
                           // Only this section scrolls. Short benefits shrink to
@@ -505,7 +516,7 @@ class _HackDetailScreenState extends State<HackDetailScreen> {
                                                   step.description,
                                                   style: AppText.sans(
                                                     12.5,
-                                                    color: AppColors.textDim,
+                                                    color: AppColors.textMuted,
                                                     height: 1.6,
                                                   ),
                                                 ),
@@ -779,7 +790,7 @@ class _RatingPanel extends StatelessWidget {
             'RATINGS',
             size: 9.5,
             letterSpacing: 1.8,
-            color: AppColors.textFaint,
+            color: AppColors.textDim,
           ),
           const SizedBox(height: AppSpacing.md),
 
@@ -800,7 +811,7 @@ class _RatingPanel extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     softWrap: false,
-                    style: AppText.sans(11, color: AppColors.textFaint),
+                    style: AppText.sans(11, color: AppColors.textDim),
                   ),
                 ),
               ],
@@ -808,7 +819,7 @@ class _RatingPanel extends StatelessWidget {
           if (!hack.circleRating.hasRatings && !hack.platformRating.hasRatings)
             Text(
               'Not rated yet — yours would be the first.',
-              style: AppText.sans(12, color: AppColors.textDim),
+              style: AppText.sans(12, color: AppColors.textMuted),
             ),
 
           const SizedBox(height: AppSpacing.lg),

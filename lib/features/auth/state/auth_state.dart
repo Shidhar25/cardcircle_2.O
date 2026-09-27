@@ -6,7 +6,7 @@ import '../../../core/services/api_service.dart';
 import '../../../core/services/api_result.dart';
 import '../../../core/services/device_service.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../shared/models/card_network.dart';
+import '../../../shared/models/logo_assets.dart';
 import '../../../shared/models/models.dart';
 
 class AuthState extends ChangeNotifier {
@@ -137,48 +137,79 @@ class AuthState extends ChangeNotifier {
       .map((w) => w[0].toUpperCase() + w.substring(1))
       .join(' ');
 
+  /// The first usable URL in [candidates].
+  static String? _firstUrl(List<dynamic> candidates) {
+    for (final c in candidates) {
+      if (c is String && c.trim().isNotEmpty) return c.trim();
+    }
+    return null;
+  }
+
+  /// The saved-card id for one `GET /user/cards` row, with a loud warning
+  /// when the row has none.
+  ///
+  /// Resolving the id lives on [CreditCard]; what belongs here is noticing
+  /// that it failed. Silence is how the old fallback turned a missing field
+  /// into a 500 from the database instead of a message anyone could act on.
+  static String _savedCardId(Map<String, dynamic> item) {
+    final id = CreditCard.savedIdFrom(item);
+    if (id.isEmpty) {
+      LoggerService.warning(
+        'Saved card "${item['card_name'] ?? '?'}" has no user_card_id — '
+        'it cannot be deleted or shared. Row keys: ${item.keys.toList()}',
+      );
+    }
+    return id;
+  }
+
   Future<void> fetchUserCards() async {
     final responseList = await ApiService.getUserCards();
     if (responseList != null) {
       final List<CreditCard> fetchedCards = [];
       for (final item in responseList) {
-        final userCardId = (item['user_card_id'] ?? '') as String;
+        final userCardId = _savedCardId(item);
         final cardId = (item['card_id'] ?? '') as String;
         final bankSlug = (item['bank_id'] ?? item['bank_name'] ?? '') as String;
         final bankDisplayName = _titleCaseSlug(bankSlug);
         final cardName = (item['card_name'] ?? '') as String;
         final issuer = item['issuer'] as String?;
         final network = item['network'] as String?;
-        final imageUrl = item['image_url'] as String?;
 
-        // The saved-card endpoint has no `is_card_specific` flag, unlike
-        // the catalog, so it is inferred from the path. Generic artwork
-        // lives under `/generic/` — both `bank-generic-cards/` and
-        // `bank-card-bg/`; card-specific art lives under
-        // `/credit-card-images/`. Testing only for `bank-generic-cards`
-        // mislabelled every `bank-card-bg` card as specific.
-        final bool isCardSpecific =
-            imageUrl != null && !imageUrl.contains('/generic/');
+        // `image` is the object form (`{url, is_card_specific}`) and
+        // `image_url` the flat one. Both ship today; the object is
+        // preferred because it states card-specificity outright instead of
+        // leaving it to be guessed from the path.
+        final image = (item['image'] as Map?)?.cast<String, dynamic>();
+        final String? finalImageUrl = _firstUrl([
+          image?['url'],
+          item['image_url'],
+        ]);
+        final bool isCardSpecific = image?['is_card_specific'] is bool
+            ? image!['is_card_specific'] as bool
+            : (finalImageUrl != null && !finalImageUrl.contains('/generic/'));
 
-        // Bank identity comes from the curated brand registry, not the
-        // network: bundled assets can't 404, can't be swapped for card
-        // artwork by an upstream change, and render instantly.
         final brand = bankBrandFor(bankSlug);
 
-        // Real bank mark for the plate. Sanitized upstream so card artwork
-        // can't arrive here; resolves for banks that have an asset and
-        // silently hides for the ones that don't.
-        final String? bankLogoUrl = await ApiService.bankLogoFor(bankSlug);
+        // The server's own URL comes first now, for both marks. `/banks`
+        // serves real logos (mostly `/bank/logo/*.svg`) or an explicit null,
+        // and `/user/cards` carries `network_logo.url` per card — so there
+        // is nothing left for the app to guess at.
+        final String? bankLogoUrl =
+            await ApiService.bankLogoFor(bankSlug) ?? LogoAssets.bank(bankSlug);
 
-        // Logo URL comes from the shared network registry, which only
-        // names slugs that actually exist on S3 — RuPay has no artwork, so
-        // it deliberately yields no URL and is identified by its label on
-        // the plate instead.
-        final String? networkLogoUrl = CardNetwork.parse(network)?.logoUrl;
+        final networkLogo = (item['network_logo'] as Map?)
+            ?.cast<String, dynamic>();
+        // 1. What the server sent for this specific card. 2. Failing that,
+        // whatever `/card-networks` states for the network generally.
+        // Nothing here is bundled with the app or guessed from a naming
+        // convention — only what the API itself has said.
+        final String? networkLogoUrl =
+            _firstUrl([networkLogo?['url']]) ??
+            await ApiService.networkLogoFor(network);
 
         fetchedCards.add(
           CreditCard(
-            id: userCardId.isNotEmpty ? userCardId : cardId,
+            id: userCardId,
             catalogCardId: cardId,
             name: cardName,
             bank: brand.name.isNotEmpty ? brand.name : bankDisplayName,
@@ -190,9 +221,7 @@ class AuthState extends ChangeNotifier {
             gradientColors: brand.gradient,
             type: (item['card_type'] as String? ?? 'General').toLowerCase(),
             category: (item['card_type'] as String?) ?? 'General',
-            imageUrl: (imageUrl != null && imageUrl.isNotEmpty)
-                ? imageUrl
-                : null,
+            imageUrl: finalImageUrl,
             isCardSpecific: isCardSpecific,
             bankLogoUrl: bankLogoUrl,
             networkLogoUrl: networkLogoUrl,
@@ -207,6 +236,15 @@ class AuthState extends ChangeNotifier {
   }
 
   Future<ApiResult<Map<String, dynamic>>> deleteCard(String userCardId) async {
+    if (userCardId.trim().isEmpty) {
+      // The row arrived without a saved-card id. Sending an empty or catalog
+      // id deletes nothing and returns a 500 from the uuid cast.
+      LoggerService.warning('Delete skipped: card has no saved-card id.');
+      return const ApiResult.failure(
+        'This card is missing its id — pull to refresh your cards and try '
+        'again.',
+      );
+    }
     final result = await ApiService.deleteUserCards([userCardId]);
     if (result.ok) {
       _user.cards.removeWhere((c) => c.id == userCardId);
@@ -221,7 +259,7 @@ class AuthState extends ChangeNotifier {
   /// token means every install registers as the same device, so notifications
   /// go to whoever registered it first and nobody else is reachable.
   Future<void> registerPushToken() async {
-    final token = await NotificationService.requestPermissionAndGetToken();
+    final token = await NotificationService.registerForPush();
     if (token == null || token.isEmpty) {
       LoggerService.info('Push not registered: permission denied or no token.');
       return;

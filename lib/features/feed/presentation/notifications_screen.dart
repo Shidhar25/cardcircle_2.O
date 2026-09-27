@@ -87,7 +87,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   void _showCardAccessSheet(String followId, String requesterName) {
     final authState = Provider.of<AuthState>(context, listen: false);
-    final myCards = authState.user.cards;
+    // Same rule as the access sheet in Circle: a card the server cannot
+    // address by id is not offered, rather than failing the approval.
+    final myCards = authState.user.cards
+        .where((c) => c.isAddressable)
+        .toList();
     final List<String> selectedCards = myCards.map((c) => c.id).toList();
 
     showModalBottomSheet(

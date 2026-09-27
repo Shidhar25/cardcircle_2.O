@@ -5,6 +5,37 @@ class CreditCard {
   /// address.
   final String id;
 
+  /// The saved-card id in one `GET /user/cards` row, or empty when it has
+  /// none.
+  ///
+  /// Read leniently across spellings because this is the one field the
+  /// client cannot work around being wrong about: every endpoint that
+  /// addresses a saved card takes it and nothing else. It deliberately does
+  /// NOT fall back to the catalog `card_id` — that fallback is what made
+  /// sharing and deleting fail, since the server casts this to a uuid and a
+  /// catalog id is a Mongo ObjectId.
+  static String savedIdFrom(Map<String, dynamic> row) {
+    for (final key in const [
+      'user_card_id',
+      'userCardId',
+      'user_card',
+      'id',
+      '_id',
+    ]) {
+      final value = row[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return '';
+  }
+
+  /// Whether this card can be addressed as a saved card — deleted, or named
+  /// in a follower's access list.
+  ///
+  /// False when `GET /user/cards` sent no saved-card id for it. The endpoints
+  /// that take one reject anything else outright (the server casts it to a
+  /// uuid), so a card without it must not be offered for either.
+  bool get isAddressable => id.trim().isNotEmpty;
+
   /// The catalog id (`card_id`) this saved card was created from.
   ///
   /// Separate from [id] because benefits list the cards they apply to by

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The backend is served over plain HTTP from a bare IP. Android has blocked
+  cleartext by default since API 28, so without this the release build fails
+  every request while the debug build looks fine.
+
+  Scoped to the one host rather than flipping usesCleartextTraffic on the
+  whole app, so every other connection the app makes still has to be TLS.
+  Delete this file and its manifest reference once the API is on HTTPS.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">13.205.204.182</domain>
+    </domain-config>
+</network-security-config>

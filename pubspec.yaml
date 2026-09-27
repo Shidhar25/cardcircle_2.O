@@ -75,6 +75,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/brand/
+    - assets/logos/
     - assets/icons/
     - assets/fonts/
   # Card artwork, bank logos and network logos are served by the backend

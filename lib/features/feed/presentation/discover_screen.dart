@@ -201,7 +201,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                             const Icon(
                               PhosphorIconsRegular.magnifyingGlass,
                               size: 16,
-                              color: AppColors.textFaint,
+                              color: AppColors.textDim,
                             ),
                             const SizedBox(width: AppSpacing.sm),
                             Expanded(
@@ -215,7 +215,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                   hintText: config.text('discover.searchHint'),
                                   hintStyle: AppText.sans(
                                     13.5,
-                                    color: AppColors.textFaint,
+                                    color: AppColors.textDim,
                                   ),
                                 ),
                               ),
@@ -313,7 +313,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                     const Icon(
                                       PhosphorIconsRegular.magnifyingGlass,
                                       size: 30,
-                                      color: AppColors.textGhost,
+                                      color: AppColors.textDim,
                                     ),
                                     const SizedBox(height: AppSpacing.md),
                                     // Naming the search back to the reader
@@ -326,7 +326,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                       textAlign: TextAlign.center,
                                       style: AppText.sans(
                                         13,
-                                        color: AppColors.textFaint,
+                                        color: AppColors.textMuted,
                                       ),
                                     ),
                                     if (error != null) ...[
@@ -382,7 +382,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                                 '/hack-detail',
                                 arguments: hack,
                               ),
-                              onLike: () => feedState.likeHack(hack.id),
                             );
                           },
                         ),
@@ -443,7 +442,7 @@ class _FeedFooter extends StatelessWidget {
                 Text(
                   error!,
                   textAlign: TextAlign.center,
-                  style: AppText.sans(12, color: AppColors.textFaint),
+                  style: AppText.sans(12, color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 6),
                 Text('Retry', style: AppText.sans(12.5, color: AppColors.gold)),
@@ -463,25 +462,30 @@ class _FeedFooter extends StatelessWidget {
           "THAT'S EVERYTHING",
           size: 9,
           letterSpacing: 1.6,
-          color: AppColors.textGhost,
+          color: AppColors.textDim,
         ),
       ),
     );
   }
 }
 
+/// The reader's own qualifying cards, as a chip label.
+///
+/// Joining every name with commas overflowed the chip into an ellipsis that
+/// cut mid-word — "ixigo AU Credit Card, HDFC Rega…" tells the reader less
+/// than one whole name does. One name is named; the rest are counted, which
+/// stays legible at any width and still says there is more than one.
+String _cardNamesLabel(List<String> names) {
+  if (names.length == 1) return names.first;
+  return '${names.first} +${names.length - 1}';
+}
+
 class _HackRow extends StatelessWidget {
   final Hack hack;
   final AvatarHue hue;
   final VoidCallback onOpen;
-  final VoidCallback onLike;
 
-  const _HackRow({
-    required this.hack,
-    required this.hue,
-    required this.onOpen,
-    required this.onLike,
-  });
+  const _HackRow({required this.hack, required this.hue, required this.onOpen});
 
   @override
   Widget build(BuildContext context) {
@@ -550,7 +554,7 @@ class _HackRow extends StatelessWidget {
                     hack.category,
                     size: 8.5,
                     letterSpacing: 1.2,
-                    color: AppColors.textDim,
+                    color: AppColors.textMuted,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -591,7 +595,7 @@ class _HackRow extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                     style: AppText.sans(
                       12.5,
-                      color: AppColors.textDim,
+                      color: AppColors.textMuted,
                       height: 1.55,
                     ),
                   ),
@@ -615,78 +619,32 @@ class _HackRow extends StatelessWidget {
             // fought a sibling Flexible for the leftovers. `savings` is
             // often a whole sentence ("3.5% saved on every international
             // transaction, with no cap"), so the row overflowed on nearly
-            // every real benefit. The two info chips now share the space
-            // that the fixed-width like button leaves.
+            // every real benefit. Both chips are flexible and share the row.
             child: Row(
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: MetaChip(
-                          icon: PhosphorIconsRegular.trendUp,
-                          iconColor: AppColors.teal,
-                          background: AppColors.tealSurface,
-                          label: hack.savings,
-                          labelColor: AppColors.teal,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.xs),
-                      // Which of the reader's own cards this works with.
-                      // Hidden entirely when none match, rather than
-                      // claiming "All Credit Cards" as it used to.
-                      if (myCardNames.isNotEmpty)
-                        Flexible(
-                          child: MetaChip(
-                            icon: PhosphorIconsRegular.creditCard,
-                            iconColor: AppColors.gold,
-                            background: AppColors.elevated,
-                            label: myCardNames.join(', '),
-                            labelColor: const Color(0xFFB2B6CA),
-                          ),
-                        ),
-                    ],
+                Flexible(
+                  child: MetaChip(
+                    icon: PhosphorIconsRegular.trendUp,
+                    iconColor: AppColors.teal,
+                    background: AppColors.tealSurface,
+                    label: hack.savings,
+                    labelColor: AppColors.teal,
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
-                GestureDetector(
-                  onTap: onLike,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 9,
-                      vertical: 5.6,
-                    ),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppRadii.chip),
-                      color: hack.liked
-                          ? AppColors.gold.withValues(alpha: 0.14)
-                          : AppColors.elevated,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          hack.liked
-                              ? PhosphorIconsFill.heart
-                              : PhosphorIconsRegular.heart,
-                          size: 13,
-                          color: hack.liked
-                              ? AppColors.gold
-                              : AppColors.textDim,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '${hack.likes}',
-                          style: AppText.mono(
-                            9.5,
-                            ls: 0,
-                            c: hack.liked ? AppColors.gold : AppColors.textDim,
-                          ),
-                        ),
-                      ],
+                // Which of the reader's own cards this works with. Hidden
+                // entirely when none match, rather than claiming "All Credit
+                // Cards" as it used to.
+                if (myCardNames.isNotEmpty)
+                  Flexible(
+                    child: MetaChip(
+                      icon: PhosphorIconsRegular.creditCard,
+                      iconColor: AppColors.gold,
+                      background: AppColors.elevated,
+                      label: _cardNamesLabel(myCardNames),
+                      labelColor: AppColors.textMuted,
                     ),
                   ),
-                ),
               ],
             ),
           ),

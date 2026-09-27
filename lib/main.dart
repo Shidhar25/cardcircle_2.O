@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'core/theme/app_theme.dart';
-import 'core/config/config_inspector_screen.dart';
 import 'core/config/remote_config.dart';
 import 'core/services/logger_service.dart';
 import 'core/services/local_storage_service.dart';
@@ -39,19 +40,22 @@ void main() async {
   // then refreshes it from the network.
   RemoteConfig.instance.restoreCached();
 
-  // Initialize Firebase and Request Notification Permissions
+  // Firebase itself is awaited — it is fast, and messaging needs it in place
+  // before anything asks for a token.
+  //
+  // The permission prompt deliberately is NOT awaited here. On iOS it is a
+  // system modal, and asking before `runApp` puts it over a black screen
+  // with no app behind it to explain why; it also blocks the first frame
+  // behind a round trip to Apple. It runs after the UI is up instead.
   try {
     await Firebase.initializeApp();
     LoggerService.info('Firebase initialized successfully.');
-    final fcmToken = await NotificationService.requestPermissionAndGetToken();
-    LoggerService.info('FCM Token: $fcmToken');
   } catch (e, stack) {
-    LoggerService.error(
-      'Failed to initialize Firebase or notifications',
-      e,
-      stack,
-    );
+    LoggerService.error('Failed to initialize Firebase', e, stack);
   }
+
+  // Fire-and-forget, once the tree is building rather than before it.
+  unawaited(NotificationService.registerForPush());
 
   runApp(
     MultiProvider(
@@ -135,8 +139,6 @@ class _CardCircleAppState extends State<CardCircleApp> {
         '/notifications': (context) => const NotificationsScreen(),
         '/hack-detail': (context) => const HackDetailScreen(),
         // Debug-only; the Profile entry point is gated the same way.
-        ConfigInspectorScreen.routeName: (context) =>
-            const ConfigInspectorScreen(),
       },
     );
   }

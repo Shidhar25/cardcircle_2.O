@@ -1,9 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/theme/app_theme.dart';
 import '../models/card_material.dart';
-import '../models/card_network.dart';
 import 'bank_mark.dart';
 
 /// Paints a plate's surface finish. These are the details that sell the card
@@ -104,11 +104,6 @@ class CardPlate extends StatelessWidget {
   /// cards the backend has no image for.
   final String? artworkUrl;
 
-  /// True when [artworkUrl] depicts this exact card. A card-specific image
-  /// already carries the bank's and network's branding, so overlaying the
-  /// marks again would double them up.
-  final bool isCardSpecific;
-
   final String? bankLogoUrl;
   final String name;
   final String? networkLogoUrl;
@@ -138,7 +133,6 @@ class CardPlate extends StatelessWidget {
     required this.name,
     required this.material,
     this.artworkUrl,
-    this.isCardSpecific = false,
     this.bankLogoUrl,
     this.networkLogoUrl,
     this.network = '',
@@ -148,50 +142,49 @@ class CardPlate extends StatelessWidget {
     this.height = 150,
   });
 
-  /// Whether the issuer and network marks are drawn over the face.
+  /// How far the artwork is pushed past each edge of the plate, in logical
+  /// pixels of the plate's width.
   ///
-  /// Card-specific artwork is a picture of that exact card, which already
-  /// carries the issuer's branding and the network mark in its own design.
-  /// Overlaying ours prints both a second time, in the wrong place. Generic
-  /// bank backgrounds carry no branding, so there the marks are the only
-  /// thing identifying the card.
-  bool get _showMarks => !(isCardSpecific && (artworkUrl?.isNotEmpty ?? false));
+  /// Full-bleed art drawn at exactly the plate's size leaves a hairline of
+  /// plate showing along the edges: `cover` rounds the drawn rectangle to
+  /// whole device pixels, and the rounded-corner clip antialiases whatever
+  /// sits under the curve. Both read as a faint seam around the card.
+  ///
+  /// Six pixels across the width buries it. The scale is uniform, so the
+  /// shorter axis gets `6 / 1.586` — about 3.8px.
+  ///
+  /// Close to the practical ceiling: this crops the artwork's own edge and
+  /// the bank and network marks sit near it, so past roughly 8px they start
+  /// losing their outlines — the failure the old 1.2x crop caused.
+  ///
+  /// Derived from the laid-out width rather than fixed, so the bleed stays
+  /// the same thickness on a 320px phone and a tablet instead of scaling
+  /// into a visible crop.
+  static const double _edgeBleed = 6.0;
 
-  /// How much to enlarge card artwork so it fills the plate.
+  /// Extra overscan at the bottom edge only, on top of [_edgeBleed].
   ///
-  /// Every image the catalog serves — generic bank backgrounds *and*
-  /// card-specific art — is the same 1000x630 canvas with the card inset
-  /// and a drop shadow baked in around it. Measured:
+  /// The bottom seam survived the uniform bleed that cleared the other
+  /// three sides, so it gets this much again. Applied as a vertical-only
+  /// scale anchored to the top, which is what keeps it off the top edge —
+  /// where the bank mark sits and there is least room to spare.
   ///
-  /// ```
-  /// generic/bank-generic-cards/…   content 880x554  needs 1.137
-  /// credit-card-images/…/gold      content 879x556  needs 1.138
-  /// generic/bank-card-bg/…         content 838x556  needs 1.193
-  /// ```
-  ///
-  /// Drawn at `BoxFit.cover` that renders a card inside a card: a visible
-  /// gap and a second shadow sitting inside the plate's own rounded edge.
-  ///
-  /// One factor covers the widest inset measured, plus 1% overscan against
-  /// the artwork's antialiased edge. It is deliberately uniform rather than
-  /// per-image: the alpha bounding box is only knowable by decoding the
-  /// image, which is far too costly to do per frame. The cost is that art
-  /// with a tighter inset loses a few percent at the edges — acceptable,
-  /// and invisible next to the gap it replaces.
-  ///
-  /// If the artwork is ever re-exported without the margin, this becomes
-  /// 1.0 and can be deleted.
-  static const double _artZoom = 1.193 * 1.01;
+  /// Costs a vertical stretch of `2 / plate height`, about 0.8% on a phone.
+  /// Not visible on artwork with no straight horizontal reference in it.
+  static const double _bottomBleed = 2.0;
 
   /// Corner radius of the plate, as a multiple of the 150px design unit.
   ///
-  /// The artwork carries its own rounded corners — about 4.3% of the card's
-  /// width, which works out slightly rounder than the plate's own 9u. Clip
-  /// the art with the tighter radius and each corner shows a dark sliver of
-  /// plate through the curve. Matching the artwork's radius makes the two
-  /// curves coincide; plates with no artwork keep the house 9u.
-  static const double _artworkCornerUnits = 10.3;
-  static const double _plateCornerUnits = 9;
+  /// One radius for every plate now. The catalog artwork used to arrive as a
+  /// card inset inside a larger canvas, carrying its own rounded corners and
+  /// a baked-in drop shadow, so the plate had to be enlarged ~1.2x to crop
+  /// the margin away and clipped at the artwork's own rounder radius to stop
+  /// a dark sliver of plate showing through each curve.
+  ///
+  /// The artwork is now exported edge to edge — full bleed, square corners,
+  /// no margin and no shadow — so both workarounds are gone: the image is
+  /// drawn at its own size, and this clip is what rounds the corner.
+  static const double _cornerUnits = 9;
 
   @override
   Widget build(BuildContext context) {
@@ -199,8 +192,7 @@ class CardPlate extends StatelessWidget {
     final Color fg = material.foreground;
     final bool light = material.isLight;
     final bool hasArtwork = artworkUrl?.isNotEmpty ?? false;
-    final double radius =
-        (hasArtwork ? _artworkCornerUnits : _plateCornerUnits) * u;
+    final double radius = _cornerUnits * u;
 
     return Container(
       height: height,
@@ -221,33 +213,20 @@ class CardPlate extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (hasArtwork)
-            Transform.scale(
-              scale: _artZoom,
-              // The plate already clips, so the enlarged margin is simply
-              // cropped away rather than overflowing the card.
-              child: Image.network(
-                artworkUrl!,
-                // Cover, not fill: a card-specific photo at some other
-                // ratio is cropped evenly rather than stretched.
-                fit: BoxFit.cover,
-                alignment: Alignment.center,
-                // The source is ~1000px wide drawn at a third of that, and
-                // the zoom above enlarges it further; high filtering keeps
-                // that crisp rather than mushy.
-                filterQuality: FilterQuality.high,
-                // The gradient plate underneath stays visible on failure,
-                // so a dead URL degrades to a valid-looking card, not a
-                // hole.
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-                frameBuilder: (context, child, frame, wasSyncLoaded) {
-                  if (wasSyncLoaded) return child;
-                  return AnimatedOpacity(
-                    opacity: frame == null ? 0 : 1,
-                    duration: const Duration(milliseconds: 200),
-                    curve: Curves.easeOut,
-                    child: child,
-                  );
-                },
+            Positioned.fill(
+              child: LayoutBuilder(
+                // Two overscans, composed. The outer one is uniform and
+                // centred, so it clears all four edges equally; the inner
+                // one stretches the vertical axis alone from the top, so
+                // its extra lands on the bottom edge and nowhere else.
+                builder: (context, constraints) => Transform.scale(
+                  scale: 1 + (2 * _edgeBleed) / constraints.maxWidth,
+                  child: Transform.scale(
+                    scaleY: 1 + _bottomBleed / constraints.maxHeight,
+                    alignment: Alignment.topCenter,
+                    child: _buildArtworkWidget(artworkUrl!),
+                  ),
+                ),
               ),
             )
           else ...[
@@ -273,53 +252,47 @@ class CardPlate extends StatelessWidget {
                 ),
               ),
             ),
+
           ],
 
-          // Artwork is arbitrary, so the chrome needs a scrim to stay
-          // legible — but only where the chrome actually is. Kept light at
-          // the top and clear through the middle so the card art reads.
-          if (hasArtwork)
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.20),
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.0),
-                    Colors.black.withValues(alpha: 0.52),
-                  ],
-                  stops: const [0.0, 0.22, 0.58, 1.0],
-                ),
-              ),
-            ),
-
+          // The marks, laid out as a real card lays them out: issuer top
+          // left, network bottom right.
+          //
+          // Drawn over every plate, artwork or not. This used to be gated on
+          // the catalog's `is_card_specific` flag on the theory that such
+          // art carries its own branding — but the flag is inferred from a
+          // URL path, and a card whose artwork is just a background ended up
+          // with no marks at all.
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: 15 * u, vertical: 14 * u),
+            padding: EdgeInsets.symmetric(
+              horizontal: 15 * u,
+              vertical: 14 * u,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Bank mark, top left.
-                if (_showMarks)
-                  _BankMarkSlot(
-                    logoUrl: bankLogoUrl,
-                    bankId: bankId,
-                    bankName: bankName,
-                    height: (compact ? 11 : 17) * u,
-                    color: hasArtwork ? Colors.white : fg,
-                  )
-                else
-                  const SizedBox.shrink(),
+                _BankMarkSlot(
+                  logoUrl: bankLogoUrl,
+                  bankId: bankId,
+                  bankName: bankName,
+                  height: (compact ? 11 : 17) * u,
+                  color: fg,
+                  // The monogram is a stand-in for a missing logo on a bare
+                  // gradient. Over artwork it would be a letterform dropped
+                  // on top of a designed face, so artwork simply shows
+                  // nothing when there is no logo to show.
+                  allowMonogram: !hasArtwork,
+                ),
 
-                // Name bottom left, network bottom right — the arrangement
-                // on a real card face.
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Expanded(
-                      child: compact
+                      // The product name belongs to the gradient plate,
+                      // which has nothing else on it. Artwork already names
+                      // the card in its own type.
+                      child: (compact || hasArtwork)
                           ? const SizedBox.shrink()
                           : Text(
                               name,
@@ -327,20 +300,19 @@ class CardPlate extends StatelessWidget {
                               overflow: TextOverflow.ellipsis,
                               style: AppText.sans(
                                 11.5 * u,
-                                color: hasArtwork ? Colors.white : fg,
+                                color: fg,
                                 letterSpacing: 0.1,
                                 height: 1.25,
                               ),
                             ),
                     ),
-                    if (_showMarks)
-                      _NetworkSlot(
-                        logoUrl: networkLogoUrl,
-                        network: network,
-                        u: u,
-                        compact: compact,
-                        color: hasArtwork ? Colors.white : fg,
-                      ),
+                    _NetworkSlot(
+                      logoUrl: networkLogoUrl,
+                      network: network,
+                      u: u,
+                      compact: compact,
+                      color: fg,
+                    ),
                   ],
                 ),
               ],
@@ -372,6 +344,61 @@ class CardPlate extends StatelessWidget {
       ),
     );
   }
+
+  Widget _buildArtworkWidget(String url) {
+    final bool isSvg =
+        url.toLowerCase().endsWith('.svg') || url.toLowerCase().contains('.svg');
+    final bool isNetwork =
+        url.startsWith('http://') || url.startsWith('https://');
+
+    if (isSvg) {
+      if (isNetwork) {
+        return SvgPicture.network(
+          url,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          placeholderBuilder: (_) => const SizedBox.shrink(),
+        );
+      } else {
+        final String assetPath =
+            url.startsWith('assets/') ? url : 'assets/$url';
+        return SvgPicture.asset(
+          assetPath,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+        );
+      }
+    } else {
+      if (isNetwork) {
+        return Image.network(
+          url,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+          frameBuilder: (context, child, frame, wasSyncLoaded) {
+            if (wasSyncLoaded) return child;
+            return AnimatedOpacity(
+              opacity: frame == null ? 0 : 1,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              child: child,
+            );
+          },
+        );
+      } else {
+        final String assetPath =
+            url.startsWith('assets/') ? url : 'assets/$url';
+        return Image.asset(
+          assetPath,
+          fit: BoxFit.cover,
+          alignment: Alignment.center,
+          filterQuality: FilterQuality.high,
+          errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        );
+      }
+    }
+  }
 }
 
 /// The top-left issuer mark: the logo the backend sent, or the bank's
@@ -383,12 +410,16 @@ class _BankMarkSlot extends StatelessWidget {
   final double height;
   final Color color;
 
+  /// Whether to fall back to the bank's monogram when there is no logo URL.
+  final bool allowMonogram;
+
   const _BankMarkSlot({
     required this.logoUrl,
     required this.bankId,
     required this.bankName,
     required this.height,
     required this.color,
+    this.allowMonogram = true,
   });
 
   @override
@@ -396,6 +427,7 @@ class _BankMarkSlot extends StatelessWidget {
     if (logoUrl?.isNotEmpty ?? false) {
       return LogoBadge(url: logoUrl!, logoHeight: height);
     }
+    if (!allowMonogram) return SizedBox(height: height);
     return BankMark(
       bankId: bankId,
       bankName: bankName,
@@ -427,35 +459,24 @@ class _NetworkSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final parsed = CardNetwork.parse(network);
     final hasLogo = logoUrl?.isNotEmpty ?? false;
-    if (!hasLogo && parsed == null) return const SizedBox.shrink();
+    if (!hasLogo) return const SizedBox.shrink();
 
     return Padding(
       padding: EdgeInsets.only(left: 8 * u),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          if (hasLogo)
-            LogoBadge(url: logoUrl!, logoHeight: (compact ? 8 : 12) * u),
-          // Suppressed on thumbnails, where it would be a smudge.
-          if (!compact && parsed != null) ...[
-            if (hasLogo) SizedBox(height: 4 * u),
-            Text(
-              parsed.label.toUpperCase(),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              softWrap: false,
-              style: AppText.mono(
-                7.5 * u,
-                ls: 1.1,
-                w: FontWeight.w700,
-                c: color.withValues(alpha: 0.9),
-              ),
-            ),
-          ],
-        ],
+      // No white chip: a network mark from the API is exported with a
+      // transparent background, often white artwork meant to sit directly
+      // on a dark card. The chip would paint a white box around it instead
+      // of showing it. Bank logos ([LogoBadge]'s default) keep the chip,
+      // since those can arrive in any colour.
+      child: LogoBadge(
+        url: logoUrl!,
+        // Larger than the bank mark's 17u/11u — a network mark carries no
+        // white chip to fill out its footprint, so at the same height it
+        // reads smaller than a bank logo sitting inside one. Sized up to
+        // compensate rather than adding a chip back.
+        logoHeight: (compact ? 15 : 22) * u,
+        background: false,
       ),
     );
   }

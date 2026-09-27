@@ -1,9 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <!-- Declared here, not only in the debug manifest: the debug one is what
+         the Flutter tool injects for hot reload, so a release build shipped
+         without any network access at all. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Android 13+ asks for this before it will show a notification. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:label="CardCircle"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true"

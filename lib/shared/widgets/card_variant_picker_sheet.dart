@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/services/api_service.dart';
 import '../../core/theme/app_theme.dart';
-import '../models/card_network.dart';
 import '../models/card_variant.dart';
 import 'primitives.dart';
 
@@ -178,8 +178,10 @@ class _VariantTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final network = CardNetwork.parse(variant.network);
-    final logo = network?.logoUrl;
+    // The only source for this mark is what `/card-networks` states — no
+    // bundled asset, no guessed URL. Prefetched by the screen that opens
+    // this sheet, so this is a synchronous cache read.
+    final logo = ApiService.cachedNetworkLogo(variant.network);
 
     return OutlinedSurface(
       onTap: onTap,
@@ -200,8 +202,9 @@ class _VariantTile extends StatelessWidget {
             height: 22,
             child: logo == null
                 ? null
-                // RuPay and anything unrecognised have no artwork on S3, so
-                // the label below carries the network on its own.
+                // A network the catalog has no artwork for (which today is
+                // every one of them) leaves the label below to carry the
+                // network on its own.
                 : Image.network(
                     logo,
                     fit: BoxFit.contain,
