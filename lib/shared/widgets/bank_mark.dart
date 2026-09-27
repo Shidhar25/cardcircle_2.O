@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../../core/theme/app_theme.dart';
 import '../models/bank_brand.dart';
+import '../models/logo_assets.dart';
 
-/// A white badge holding a bank or network logo fetched over the network.
+/// A bank or network logo fetched over the network, optionally sat on a
+/// white badge.
 ///
 /// It renders *nothing at all* when the image fails. That matters because
 /// logo URLs are partly reconstructed from naming conventions and several
@@ -13,11 +16,22 @@ class LogoBadge extends StatefulWidget {
   final double logoHeight;
   final bool circular;
 
+  /// Whether to sit the logo on a white chip.
+  ///
+  /// A bank logo can be any colour, so the chip is what keeps it legible
+  /// over a card face it might otherwise vanish into. A network mark from
+  /// `network_logo.url` is already exported with a transparent background —
+  /// often white artwork meant for a dark card — and the same white chip
+  /// would swallow it whole rather than showing it. Network marks pass
+  /// `false` here for that reason; bank logos keep the default.
+  final bool background;
+
   const LogoBadge({
     super.key,
     required this.url,
     this.logoHeight = 14,
     this.circular = false,
+    this.background = true,
   });
 
   @override
@@ -33,9 +47,79 @@ class _LogoBadgeState extends State<LogoBadge> {
     if (oldWidget.url != widget.url) _failed = false;
   }
 
+  /// Marks the badge dead, so the white container stops painting too.
+  ///
+  /// Drawing nothing is the whole contract of this widget — a logo that
+  /// fails must take its badge with it, or the card face is left with an
+  /// empty white box in the corner.
+  Widget _giveUp() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && !_failed) setState(() => _failed = true);
+    });
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildLogo(String url, double logoHeight) {
+    final bool isSvg =
+        url.toLowerCase().endsWith('.svg') || url.toLowerCase().contains('.svg');
+    final bool isNetwork =
+        url.startsWith('http://') || url.startsWith('https://');
+
+    if (isSvg) {
+      // Both SVG paths need the same failure handling the raster ones have.
+      // Without it a 404 or a malformed file throws instead of degrading,
+      // and the badge keeps painting its white box around nothing — the
+      // exact bug this widget exists to prevent.
+      if (isNetwork) {
+        return SvgPicture.network(
+          url,
+          height: logoHeight,
+          fit: BoxFit.contain,
+          placeholderBuilder: (_) => const SizedBox.shrink(),
+          errorBuilder: (_, _, _) => _giveUp(),
+        );
+      } else {
+        final String assetPath =
+            url.startsWith('assets/') ? url : 'assets/$url';
+        return SvgPicture.asset(
+          assetPath,
+          height: logoHeight,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => _giveUp(),
+        );
+      }
+    } else {
+      if (isNetwork) {
+        return Image.network(
+          url,
+          height: logoHeight,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => _giveUp(),
+        );
+      } else {
+        final String assetPath =
+            url.startsWith('assets/') ? url : 'assets/$url';
+        return Image.asset(
+          assetPath,
+          height: logoHeight,
+          fit: BoxFit.contain,
+          errorBuilder: (_, _, _) => _giveUp(),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_failed) return const SizedBox.shrink();
+
+    // Bundled marks are drawn for a dark card face — most of them are
+    // white. The chip below is white too, so it would swallow them whole;
+    // they go straight onto the card instead. Same reasoning for anything
+    // that explicitly opted out of the chip via [background].
+    if (LogoAssets.isBundled(widget.url) || !widget.background) {
+      return _buildLogo(widget.url, widget.logoHeight);
+    }
 
     return Container(
       padding: widget.circular
@@ -53,18 +137,7 @@ class _LogoBadgeState extends State<LogoBadge> {
           ),
         ],
       ),
-      child: Image.network(
-        widget.url,
-        height: widget.logoHeight,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stack) {
-          // Collapse on the next frame — setState is illegal during build.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_failed) setState(() => _failed = true);
-          });
-          return const SizedBox.shrink();
-        },
-      ),
+      child: _buildLogo(widget.url, widget.logoHeight),
     );
   }
 }

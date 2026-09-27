@@ -5,6 +5,7 @@ import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/card_material.dart';
 import '../../../shared/models/card_variant.dart';
+import '../../../shared/models/logo_assets.dart';
 import '../../../shared/widgets/card_plate.dart';
 import '../../../shared/widgets/card_variant_picker_sheet.dart';
 import '../../../shared/widgets/gritty_background.dart';
@@ -70,6 +71,18 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
       if (next != _query) setState(() => _query = next);
     });
     _fetchBanks();
+    _warmNetworkLogos();
+  }
+
+  /// Loads `/card-networks` once, purely so [ApiService.cachedNetworkLogo]
+  /// has something to read by the time a card row asks for it.
+  ///
+  /// A card row is built synchronously and cannot await this itself, so a
+  /// row rendered before the fetch lands simply shows no network mark —
+  /// this rebuild is what gives it a second chance once the fetch resolves.
+  Future<void> _warmNetworkLogos() async {
+    await ApiService.warmNetworkCatalog();
+    if (mounted) setState(() {});
   }
 
   @override
@@ -521,10 +534,16 @@ class _CardRow extends StatelessWidget {
     }
 
     final String? imageUrl = url('image');
-    final bool isCardSpecific =
-        (card['image'] as Map?)?['is_card_specific'] == true;
-    final String? bankLogoUrl = url('bank_logo');
-    final String? networkLogoUrl = url('network_logo');
+    // `/cards` sends no bank logo at all today, so this is either the one
+    // bundled fallback (Axis) or nothing — `/banks` is not consulted here
+    // since that call is per-request, not something a card row can await.
+    final String? bankLogoUrl = LogoAssets.bank(card['bank_id'] as String?)
+        ?? url('bank_logo');
+    // `/cards` sends no network logo either. The only API-stated source
+    // left is `/card-networks`, prefetched in initState and read here
+    // synchronously — nothing bundled or guessed for the network mark.
+    final String? networkLogoUrl =
+        url('network_logo') ?? ApiService.cachedNetworkLogo(network);
 
     final String bankId = (card['bank_id'] as String?) ?? '';
 
@@ -567,7 +586,6 @@ class _CardRow extends StatelessWidget {
             cardType: cardType,
             network: network,
             artworkUrl: imageUrl,
-            isCardSpecific: isCardSpecific,
             bankLogoUrl: bankLogoUrl,
             networkLogoUrl: networkLogoUrl,
           ),
@@ -630,7 +648,6 @@ class _CardThumb extends StatelessWidget {
   final String cardType;
   final String network;
   final String? artworkUrl;
-  final bool isCardSpecific;
   final String? bankLogoUrl;
   final String? networkLogoUrl;
 
@@ -641,7 +658,6 @@ class _CardThumb extends StatelessWidget {
     required this.cardType,
     required this.network,
     required this.artworkUrl,
-    required this.isCardSpecific,
     required this.bankLogoUrl,
     required this.networkLogoUrl,
   });
@@ -655,7 +671,6 @@ class _CardThumb extends StatelessWidget {
       width: _height * kCardImageAspectRatio,
       child: CardPlate(
         artworkUrl: artworkUrl,
-        isCardSpecific: isCardSpecific,
         bankLogoUrl: bankLogoUrl,
         name: cardName,
         networkLogoUrl: networkLogoUrl,

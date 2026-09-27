@@ -19,6 +19,30 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
   final Set<String> _selectedCategoryIds = {};
   bool _saving = false;
 
+  /// Whether this is the registration step or Profile's "Edit categories".
+  ///
+  /// Same picker either way, but the two differ at both ends: editing starts
+  /// from what the user already chose and returns to Profile, where the
+  /// registration step starts empty and carries on to Add Cards.
+  bool _fromProfile = false;
+  bool _initialized = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    _fromProfile = args?['fromProfile'] ?? false;
+    if (_fromProfile) {
+      // Editing means starting from the current selection. Opening with none
+      // ticked made the first save wipe every category the user had.
+      final mine = context.read<CategoryState>().mine;
+      _selectedCategoryIds.addAll(mine.map((c) => c.id));
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -26,8 +50,18 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
     // once into CategoryState rather than separately per screen. The icon
     // map and colour parser that used to live here moved onto
     // [SpendCategory] for the same reason.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<CategoryState>().loadAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final categories = context.read<CategoryState>();
+      await categories.loadAll();
+      if (!_fromProfile || !mounted) return;
+      // The chips on Profile come from the same state, but arriving straight
+      // from a cold start it may not be populated yet.
+      await categories.loadMine();
+      if (!mounted || _selectedCategoryIds.isNotEmpty) return;
+      setState(
+        () => _selectedCategoryIds.addAll(categories.mine.map((c) => c.id)),
+      );
     });
   }
 
@@ -66,7 +100,13 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
       categoryState.setMine(
         categoryState.all.where((c) => _selectedCategoryIds.contains(c.id)),
       );
-      Navigator.pushNamed(context, '/select-cards');
+      // Editing ends where it started; only the registration run carries on
+      // to Add Cards.
+      if (_fromProfile) {
+        Navigator.pop(context);
+      } else {
+        Navigator.pushNamed(context, '/select-cards');
+      }
       return;
     }
     AppSnackbar.error(
@@ -76,6 +116,10 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
   }
 
   void _handleSkip() {
+    if (_fromProfile) {
+      Navigator.pop(context);
+      return;
+    }
     Navigator.pushNamed(context, '/select-cards');
   }
 
@@ -106,28 +150,31 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
                           iconSize: 15,
                           onTap: () => Navigator.pop(context),
                         ),
-                        TextButton(
-                          onPressed: _handleSkip,
-                          child: const Text(
-                            'Skip',
-                            style: TextStyle(
-                              color: AppColors.mutedForeground,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
+                        if (!_fromProfile)
+                          TextButton(
+                            onPressed: _handleSkip,
+                            child: const Text(
+                              'Skip',
+                              style: TextStyle(
+                                color: AppColors.mutedForeground,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    const StepProgressBar(currentStep: 2),
+                    if (!_fromProfile) ...[
+                      const SizedBox(height: 12),
+                      const StepProgressBar(currentStep: 2),
+                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'Step 2 of 3 — Personalize',
-                style: TextStyle(
+              Text(
+                _fromProfile ? 'Your categories' : 'Step 2 of 3 — Personalize',
+                style: const TextStyle(
                   color: AppColors.mutedForeground,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
@@ -299,11 +346,13 @@ class _SelectTagsScreenState extends State<SelectTagsScreen> {
                   enabled: _selectedCategoryIds.isNotEmpty && !_saving,
                   depth: 6.0,
                   child: NeoPopButtonText(
-                    'Next Step',
+                    _fromProfile ? 'Save categories' : 'Next Step',
                     color: _selectedCategoryIds.isNotEmpty && !_saving
                         ? AppColors.darkText
                         : Colors.black,
-                    icon: Icons.arrow_forward_rounded,
+                    icon: _fromProfile
+                        ? Icons.check_circle_rounded
+                        : Icons.arrow_forward_rounded,
                   ),
                 ),
               ),

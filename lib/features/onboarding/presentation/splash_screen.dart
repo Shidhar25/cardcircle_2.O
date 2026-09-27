@@ -436,15 +436,21 @@ class _RingPainter extends CustomPainter {
     final center = Offset(size.width / 2, size.height / 2);
     const radius = 76.0;
     const strokeWidth = 15.0;
-    // The mark is a "C": a gap at the top right, then the stroke running
-    // clockwise through gold at the bottom, purple up the left, and cyan
-    // across the top. Measured off the logo.
-    const startAngle = -20 * math.pi / 180;
-    // CSS: stroke-dasharray 478, stroke-dashoffset 478 -> 92, so only
-    // (478-92)/478 of the ring's circumference is ever drawn — not a full
-    // circle.
-    const maxSweepFraction = 310.0 / 360.0;
-    final sweep = 2 * math.pi * progress * maxSweepFraction;
+    // The mark is a "C". What makes it read as a letter rather than as a
+    // ring with a nick out of it is where the opening sits: a C's aperture
+    // is centred on the right, its two terminals level with each other
+    // above and below. The gap used to be centred on the upper-right
+    // diagonal (315°), which tilts the whole letter.
+    //
+    // Canvas angles: 0° is 3 o'clock and they run clockwise. So a gap
+    // centred on 0° means the stroke starts just below 3 o'clock, runs down
+    // and all the way round, and stops just above it.
+    const gapDegrees = 70.0;
+    const startDegrees = gapDegrees / 2;
+    const sweepDegrees = 360.0 - gapDegrees;
+
+    const startAngle = startDegrees * math.pi / 180;
+    final sweep = 2 * math.pi * progress * (sweepDegrees / 360.0);
 
     final rect = Rect.fromCircle(center: center, radius: radius);
     final paint = Paint()
@@ -461,7 +467,9 @@ class _RingPainter extends CustomPainter {
           _Brand.cyan,
         ],
         stops: [0.0, 0.22, 0.52, 0.70, 0.86, 1.0],
-        transform: GradientRotation(-20 * math.pi / 180),
+        // Pinned to the stroke's own start so the colour run still opens on
+        // gold at the lower terminal and closes on cyan at the upper one.
+        transform: GradientRotation(startAngle),
       ).createShader(rect);
 
     canvas.drawArc(rect, startAngle, sweep, false, paint);

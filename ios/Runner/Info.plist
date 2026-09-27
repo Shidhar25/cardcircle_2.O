@@ -68,5 +68,32 @@
 	</array>
 	<key>NSContactsUsageDescription</key>
 	<string>CardCircle needs access to contacts to match you with friends already using the app.</string>
+	<!-- App Transport Security.
+
+	     The backend is currently served over plain HTTP from a bare IP
+	     (http://13.205.204.182:8080). iOS blocks cleartext HTTP by default,
+	     so without this exemption every single request fails and the app is
+	     dead on an iPhone — no OTP, no feed, no cards.
+
+	     NSExceptionDomains is the surgical fix, but its keys are matched as
+	     domain names and do not reliably apply to IP literals, which is what
+	     this backend is. So the blanket allowance is what actually works
+	     here.
+
+	     THIS MUST NOT SHIP. Put the API behind HTTPS and delete this whole
+	     NSAppTransportSecurity block: App Store review requires written
+	     justification for NSAllowsArbitraryLoads and rejects it for
+	     "our server doesn't do TLS yet". -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
+	<!-- FCM delivers pushes to a backgrounded app through this mode. Without
+	     it iOS drops data-only messages while the app is not in front. -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

@@ -266,18 +266,4 @@ class FeedState extends ChangeNotifier {
     }
     if (changed) notifyListeners();
   }
-
-  void likeHack(String id) {
-    LoggerService.debug('Toggling like for hack ID: $id');
-    for (final list in [_mine.items, _circle.items, _search.items]) {
-      for (final h in list) {
-        if (h.id == id) {
-          h.liked = !h.liked;
-          h.likes += h.liked ? 1 : -1;
-          break;
-        }
-      }
-    }
-    notifyListeners();
-  }
 }

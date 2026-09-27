@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
-import '../../../core/config/config_inspector_screen.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../auth/state/auth_state.dart';
@@ -25,19 +24,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _fanned = false;
-
-  /// Dev-only rows are appended only in debug builds, so a release build
-  /// has no path to the internals.
-  static List<Map<String, dynamic>> get visibleSettingsOptions => [
-    ...settingsOptions,
-    if (ConfigInspectorScreen.isAvailable) ...[
-      {
-        'label': 'Remote config (dev)',
-        'icon': PhosphorIconsRegular.slidersHorizontal,
-        'route': ConfigInspectorScreen.routeName,
-      },
-    ],
-  ];
 
   static const List<Map<String, dynamic>> settingsOptions = [
     {
@@ -471,8 +457,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                             GestureDetector(
-                              onTap: () =>
-                                  Navigator.pushNamed(context, '/select-tags'),
+                              onTap: () => Navigator.pushNamed(
+                                context,
+                                '/select-tags',
+                                arguments: {'fromProfile': true},
+                              ),
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 11,
@@ -513,7 +502,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       padding: EdgeInsets.zero,
                       child: Column(
                         children: [
-                          ...visibleSettingsOptions.map(
+                          ...settingsOptions.map(
                             (opt) => _SettingsRow(
                               label: opt['label'],
                               icon: opt['icon'],
@@ -801,13 +790,17 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'YOUR CARDS',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 2.0,
+                const Expanded(
+                  child: Text(
+                    'YOUR CARDS',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2.0,
+                    ),
                   ),
                 ),
                 Row(
@@ -918,54 +911,69 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Both values are free text from the catalog and
+                        // run long — "AU Small Finance Bank", "Dining &
+                        // Entertainment". Unconstrained they overflowed the
+                        // row, so each side takes half and ellipsises. The
+                        // card's own name gets the full width below.
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'CARD NETWORK',
-                                  style: TextStyle(
-                                    color: AppColors.mutedForeground,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1,
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'CARD NETWORK',
+                                    style: TextStyle(
+                                      color: AppColors.mutedForeground,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  card.bank.toUpperCase(),
-                                  style: const TextStyle(
-                                    color: AppColors.primary,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    card.bank.toUpperCase(),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.primary,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                const Text(
-                                  'CATEGORY',
-                                  style: TextStyle(
-                                    color: AppColors.mutedForeground,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1,
+                            const SizedBox(width: AppSpacing.md),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  const Text(
+                                    'CATEGORY',
+                                    style: TextStyle(
+                                      color: AppColors.mutedForeground,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 1,
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  card.category.toUpperCase(),
-                                  style: const TextStyle(
-                                    color: AppColors.green,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    card.category.toUpperCase(),
+                                    maxLines: 2,
+                                    textAlign: TextAlign.end,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: AppColors.green,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -982,6 +990,8 @@ class _CardDetailsModalViewState extends State<_CardDetailsModalView> {
                         const SizedBox(height: 4),
                         Text(
                           widget.cardHolderName.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,

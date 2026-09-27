@@ -32,45 +32,15 @@ void main() {
     });
   });
 
-  group('logo URLs are only built for artwork that exists', () {
-    // Probed against S3: these six return 200.
-    test('networks with artwork produce a URL', () {
-      for (final raw in [
-        'Visa',
-        'Mastercard',
-        'Amex',
-        'Diners Club',
-        'Discover',
-        'Maestro',
-      ]) {
-        final n = CardNetwork.parse(raw);
-        expect(n, isNotNull, reason: raw);
-        expect(n!.logoUrl, isNotNull, reason: raw);
-        expect(n.logoUrl, contains('/generic/network-logos/'));
-        expect(n.logoUrl, endsWith('.webp'));
-      }
-    });
-
-    test('RuPay is labelled but has no logo URL', () {
-      // Every spelling of rupay.webp returns 403 — requesting one just
-      // guarantees a failed image, so no URL is generated and the plate
-      // identifies the card by its label instead.
-      final n = CardNetwork.parse('RuPay');
-      expect(n, isNotNull);
-      expect(n!.label, 'RuPay');
-      expect(n.logoUrl, isNull);
-    });
-
-    test('the URL uses the network slug, not the display label', () {
-      // "American Express" would 403; "amex" is the file that exists.
-      expect(
-        CardNetwork.parse('American Express')!.logoUrl,
-        endsWith('/amex.webp'),
-      );
-      expect(
-        CardNetwork.parse('Diners Club')!.logoUrl,
-        endsWith('/diners.webp'),
-      );
+  group('this class states no logo', () {
+    // A network mark is never bundled with the app or guessed from a
+    // naming convention any more — only ever taken from what the API
+    // states (`network_logo.url` per card, or `/card-networks`' `logo_url`
+    // via ApiService.networkLogoFor / cachedNetworkLogo). CardNetwork's job
+    // ends at recognising and labelling the network.
+    test('label is the only thing a parsed network carries', () {
+      final visa = CardNetwork.parse('Visa Signature')!;
+      expect(visa.label, 'Visa');
     });
   });
 }

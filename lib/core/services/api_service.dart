@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import '../../shared/models/card_network.dart';
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
 import 'auth_http_client.dart';
@@ -392,18 +393,20 @@ class ApiService {
     required String name,
     required String email,
     required String dateOfBirth,
-    required String profilePictureUrl,
+    String? profilePictureUrl,
   }) async {
     try {
       LoggerService.info('Updating user profile...');
       final response = await _client.put(
         Uri.parse('$baseUrl/user/profile'),
         headers: _headers(requireAuth: true),
+        // The picture is omitted rather than sent empty by callers that
+        // don't edit it — an empty string is an instruction to clear it.
         body: jsonEncode({
           'name': name,
           'email': email,
           'dateOfBirth': dateOfBirth,
-          'profilePictureUrl': profilePictureUrl,
+          'profilePictureUrl': ?profilePictureUrl,
         }),
       );
       final body = jsonDecode(response.body);
@@ -482,35 +485,38 @@ class ApiService {
     }
   }
 
-  static const String _assetBase =
-      'https://cardcirclepublicassets.s3.ap-south-1.amazonaws.com';
-
-  /// Genuine bank logos live under this prefix. Anything else — notably
-  /// `/credit-card-images/` and `/generic/bank-generic-cards/` — is card
-  /// artwork, not a logo.
-  static const String _bankLogoPrefix = '/generic/bank-logos/';
+  /// Paths under which `/banks` serves a genuine issuer mark.
+  ///
+  /// `/bank/logo/` is the current one and carries SVGs; `/generic/bank-logos/`
+  /// is the older set, still serving about a third of the banks.
+  static const List<String> _bankLogoPrefixes = [
+    '/bank/logo/',
+    '/generic/bank-logos/',
+  ];
 
   /// bank id -> logo URL. Null means "no genuine logo for this bank".
   static Map<String, String?>? _bankLogoCache;
 
-  /// Guards against the `/banks` endpoint returning **card artwork** in its
-  /// `logo` field, which it currently does for most banks:
+  /// Keeps card artwork out of the slot where the issuer's mark belongs.
   ///
-  ///     axis-bank → /credit-card-images/axis/axis-neo.webp
-  ///     hdfc-bank → /credit-card-images/hdfc/marriott-bonvoy-hdfc.webp
+  /// `/banks` used to answer most banks with a picture of one of their cards
+  /// (`axis-bank → /credit-card-images/axis/axis-neo.webp`), so anything
+  /// outside the logo paths was rejected and a URL was built by convention
+  /// instead.
   ///
-  /// Rendering those puts a picture of a credit card where the bank's mark
-  /// should be. Anything outside the bank-logo path is therefore rejected and
-  /// the conventional logo URL is used instead — that resolves for the banks
-  /// which do have a mark, and 404s harmlessly for the ones that don't, since
-  /// `LogoBadge` hides itself when the image fails.
+  /// That fabrication is now gone. The endpoint serves real logos or an
+  /// explicit null, and it moved most of them to `/bank/logo/*.svg` — which
+  /// the old single-prefix check rejected, so the app was discarding a
+  /// working SVG and substituting a guess that 403s:
   ///
-  /// Once `/banks` returns real logo URLs (or null) this can collapse back to
-  /// simply trusting the field.
+  ///     hdfc-bank  API → /bank/logo/hdfc-bank.svg          200
+  ///                app → /generic/bank-logos/hdfc-bank.webp 403
+  ///
+  /// Null now means what it says — no logo — and the plate falls back to the
+  /// bank's monogram rather than to a request that cannot succeed.
   static String? sanitizedBankLogo(String? bankId, String? raw) {
-    if (raw != null && raw.contains(_bankLogoPrefix)) return raw;
-    if (bankId == null || bankId.isEmpty) return null;
-    return '$_assetBase$_bankLogoPrefix$bankId.webp';
+    if (raw == null || raw.isEmpty) return null;
+    return _bankLogoPrefixes.any(raw.contains) ? raw : null;
   }
 
   // 13. Get all banks (catalog)
@@ -580,6 +586,97 @@ class ApiService {
     if (bankId.isEmpty) return null;
     if (_bankLogoCache == null) await getBanks();
     return _bankLogoCache?[bankId] ?? sanitizedBankLogo(bankId, null);
+  }
+
+  /// network name/code (lowercased) -> the `logo_url` the server has for it.
+  /// Null when fetched but the server sent no artwork for that network.
+  /// Unset (this field itself null) means never fetched.
+  static Map<String, String?>? _networkLogoCache;
+
+  /// Turns `/card-networks`' response into a lookup by both `name` and
+  /// `code`, lowercased — a card's free-text `network` field is matched
+  /// against [CardNetwork.label], which is spelled like the API's `name`.
+  @visibleForTesting
+  static Map<String, String?> parseNetworkCatalog(List<dynamic> rows) {
+    final cache = <String, String?>{};
+    for (final row in rows) {
+      if (row is! Map) continue;
+      final logo = row['logo_url'] as String?;
+      final name = (row['name'] as String?)?.trim().toLowerCase();
+      final code = (row['code'] as String?)?.trim().toLowerCase();
+      if (name != null && name.isNotEmpty) cache[name] = logo;
+      if (code != null && code.isNotEmpty) cache[code] = logo;
+    }
+    return cache;
+  }
+
+  /// Resolves [raw] — the backend's free-text network field, e.g. "Visa
+  /// Signature" or "Visa(Infinite)" — against a catalog built by
+  /// [parseNetworkCatalog].
+  ///
+  /// Goes through [CardNetwork.parse] first because [cache] is keyed by the
+  /// network's canonical name ("Visa"), not by every tier spelling the field
+  /// arrives in.
+  @visibleForTesting
+  static String? matchNetworkLogo(Map<String, String?> cache, String? raw) {
+    final label = CardNetwork.parse(raw)?.label;
+    if (label == null) return null;
+    return cache[label.toLowerCase()];
+  }
+
+  /// Fetches `GET /card-networks` and caches whatever `logo_url` the server
+  /// states per network. Public endpoint, so this works before login too.
+  ///
+  /// A failed fetch still leaves the cache non-null (empty), so a card shown
+  /// while offline is not stuck retrying the catalog on every single row.
+  static Future<void> _loadNetworkCatalog() async {
+    try {
+      final response = await _client.get(
+        Uri.parse('$baseUrl/card-networks'),
+        headers: _headers(),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        _networkLogoCache = parseNetworkCatalog(body['data'] ?? const []);
+        return;
+      }
+      LoggerService.warning(
+        'Fetch card networks failed: ${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error fetching card networks', e, stack);
+    }
+    _networkLogoCache ??= {};
+  }
+
+  /// The network-level mark the server has for [raw], fetching the catalog
+  /// first if it hasn't been loaded yet.
+  ///
+  /// This is the only source for a network mark beyond what a card's own
+  /// `network_logo.url` already carries — nothing here is bundled with the
+  /// app or guessed from a naming convention. `/card-networks` currently
+  /// sends `logo_url: null` for every network, so this returns null for all
+  /// of them until the server starts populating that field; the plate then
+  /// simply shows no network mark, which is the honest state rather than a
+  /// stand-in for it.
+  static Future<String?> networkLogoFor(String? raw) async {
+    if (_networkLogoCache == null) await _loadNetworkCatalog();
+    return matchNetworkLogo(_networkLogoCache!, raw);
+  }
+
+  /// Reads whatever the catalog cache currently holds without fetching.
+  ///
+  /// For a build method that cannot `await` — null before the catalog has
+  /// loaded is fine, since nothing renders differently: [_NetworkSlot]
+  /// already treats "no mark yet" and "no mark at all" the same way.
+  static String? cachedNetworkLogo(String? raw) =>
+      matchNetworkLogo(_networkLogoCache ?? const {}, raw);
+
+  /// Starts the catalog fetch without waiting on it, for a screen that
+  /// wants [cachedNetworkLogo] to have something by the time it first
+  /// paints its cards.
+  static Future<void> warmNetworkCatalog() async {
+    if (_networkLogoCache == null) await _loadNetworkCatalog();
   }
 
   // 14. Browse a bank's cards that the user has NOT already added.
@@ -1152,8 +1249,14 @@ class ApiService {
   /// Which of *your* cards a follower may see
   /// (`GET /follow/permissions/{followId}`).
   ///
-  /// Returns the allowed card ids; the response nests them under
+  /// Returns the allowed ids as the server states them, nested under
   /// `data.permissions` with an `is_allowed` flag per row.
+  ///
+  /// Careful: these are **catalog** card ids (Mongo ObjectIds), not the
+  /// saved-card uuids that `updateFollowPermissions` takes. The permissions
+  /// table stores the catalog id; the writer resolves a saved-card id down
+  /// to one. Callers must translate before echoing these back — see
+  /// `_loadPermissions` in the Circle screen.
   static Future<List<String>?> getFollowPermissions(String followId) async {
     try {
       final response = await _client.get(
@@ -1182,6 +1285,10 @@ class ApiService {
 
   /// Replaces which cards a follower may see
   /// (`PUT /follow/permissions/{followId}`).
+  ///
+  /// [allowedCardIds] are **saved-card ids** (`user_card_id`, a uuid), which
+  /// is not the vocabulary the matching GET answers in. Passing a catalog id
+  /// here fails with `invalid input syntax for type uuid` from the database.
   static Future<ApiResult<Map<String, dynamic>>> updateFollowPermissions(
     String followId,
     List<String> allowedCardIds,

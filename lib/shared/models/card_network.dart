@@ -3,43 +3,32 @@
 /// `network` arrives in several shapes — `"Visa Signature"`, `"Mastercard"`,
 /// `"Visa/Mastercard/RuPay"` — so it is parsed rather than printed raw.
 ///
-/// Label and logo are deliberately separate. Not every network has artwork
-/// on S3: `visa`, `mastercard`, `amex`, `diners`, `discover` and `maestro`
-/// resolve, but `rupay` returns 403 under every spelling. Generating a URL
-/// for a file that is known not to exist just means a request that fails and
-/// a mark that silently collapses, so a network without artwork carries a
-/// label and no [logoSlug] — which is why the plate shows the type as text
-/// as well as a logo.
+/// This class only recognises and labels a network. It does not carry a
+/// logo of its own: a network mark is never bundled with the app or built
+/// from a guessed S3 path, only ever taken from what the API actually
+/// states — a card's own `network_logo.url`, or `/card-networks`' `logo_url`
+/// via `ApiService.networkLogoFor`/`cachedNetworkLogo`. [label] is what
+/// those lookups match against, since it is spelled the way the API's own
+/// `name` field is.
 class CardNetwork {
   /// Display name, e.g. "Mastercard", "RuPay".
   final String label;
 
-  /// Filename stem under `generic/network-logos/`, or null when the network
-  /// has no artwork.
-  final String? logoSlug;
-
-  const CardNetwork(this.label, this.logoSlug);
-
-  static const String _logoBase =
-      'https://cardcirclepublicassets.s3.ap-south-1.amazonaws.com'
-      '/generic/network-logos';
-
-  /// Absolute logo URL, or null when this network has no artwork.
-  String? get logoUrl => logoSlug == null ? null : '$_logoBase/$logoSlug.webp';
+  const CardNetwork(this.label);
 
   /// Recognised networks, in match order.
   ///
   /// Order matters for multi-network strings like "Visa/Mastercard/RuPay":
   /// the first match wins, so the most widely accepted network is listed
   /// first and becomes the one shown.
-  static const List<(List<String>, String, String?)> _known = [
-    (['visa'], 'Visa', 'visa'),
-    (['mastercard', 'master card'], 'Mastercard', 'mastercard'),
-    (['amex', 'american express'], 'American Express', 'amex'),
-    (['rupay'], 'RuPay', null),
-    (['diners'], 'Diners Club', 'diners'),
-    (['discover'], 'Discover', 'discover'),
-    (['maestro'], 'Maestro', 'maestro'),
+  static const List<(List<String>, String)> _known = [
+    (['visa'], 'Visa'),
+    (['mastercard', 'master card'], 'Mastercard'),
+    (['amex', 'american express'], 'American Express'),
+    (['rupay'], 'RuPay'),
+    (['diners'], 'Diners Club'),
+    (['discover'], 'Discover'),
+    (['maestro'], 'Maestro'),
   ];
 
   /// Parses [raw], or returns null when nothing is recognisable.
@@ -48,9 +37,9 @@ class CardNetwork {
     final n = raw.toLowerCase();
     if (n.trim().isEmpty) return null;
 
-    for (final (aliases, label, slug) in _known) {
+    for (final (aliases, label) in _known) {
       for (final alias in aliases) {
-        if (n.contains(alias)) return CardNetwork(label, slug);
+        if (n.contains(alias)) return CardNetwork(label);
       }
     }
     return null;
@@ -61,8 +50,8 @@ class CardNetwork {
     if (raw == null || raw.trim().isEmpty) return const [];
     final n = raw.toLowerCase();
     final out = <CardNetwork>[];
-    for (final (aliases, label, slug) in _known) {
-      if (aliases.any(n.contains)) out.add(CardNetwork(label, slug));
+    for (final (aliases, label) in _known) {
+      if (aliases.any(n.contains)) out.add(CardNetwork(label));
     }
     return out;
   }

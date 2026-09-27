@@ -319,7 +319,12 @@ class _CircleScreenState extends State<CircleScreen> {
     List<String> preselected = const [],
   }) {
     final authState = Provider.of<AuthState>(context, listen: false);
-    final myCards = authState.user.cards;
+    // Only cards the server can actually be told about. One with no
+    // saved-card id would fail the PUT for the whole list, taking the
+    // other cards' permissions down with it.
+    final myCards = authState.user.cards
+        .where((c) => c.isAddressable)
+        .toList();
     final List<String> selectedCards = List.of(preselected);
 
     showModalBottomSheet(
@@ -719,21 +724,63 @@ class _CircleScreenState extends State<CircleScreen> {
     for (final id in missing) {
       final allowed = await ApiService.getFollowPermissions(id);
       if (!mounted) return;
+      // Stored exactly as the server sent them; translation happens at the
+      // point of use, because the user's own cards may not have loaded yet
+      // and this map is cached for the life of the screen.
       if (allowed != null) _permissions[id] = allowed;
     }
     if (mounted) setState(() => _loadingPermissions = false);
   }
 
+  /// The cards a follower may see, as saved-card ids this screen can use.
+  ///
+  /// Translates the ids `GET /follow/permissions` answers with into the ones
+  /// every other part of this screen speaks.
+  ///
+  /// The two endpoints disagree: the GET returns the **catalog** card id
+  /// (`6a91bd69...`, a Mongo ObjectId) because that is what the permissions
+  /// table stores, while the PUT takes the **saved-card** id
+  /// (`0e564368-...`, a uuid) and resolves it itself.
+  ///
+  /// Echoing the GET's ids straight back is what broke editing access: the
+  /// sheet opened pre-filled with catalog ids, so no card looked ticked even
+  /// when it was shared, and saving sent those ids to a column that casts to
+  /// uuid — `invalid input syntax for type uuid`, a 500, and no change.
+  ///
+  /// An id matching no card the user still holds is dropped: it cannot be
+  /// sent back, and the card is gone from their wallet anyway.
+  List<String> _allowedSavedCardIds(String followId) {
+    final ids = _permissions[followId];
+    if (ids == null || ids.isEmpty) return const [];
+    final cards = Provider.of<AuthState>(context, listen: false).user.cards;
+    final out = <String>[];
+    for (final id in ids) {
+      for (final card in cards) {
+        // Catalog id is what the server answers with. The saved-card id is
+        // accepted too, because a successful save writes the ids it just
+        // sent straight into this map rather than refetching.
+        final matches = card.catalogCardId == id || card.id == id;
+        if (matches && card.isAddressable && !out.contains(card.id)) {
+          out.add(card.id);
+          break;
+        }
+      }
+    }
+    return out;
+  }
+
   String _permissionLine(String followId) {
-    final allowed = _permissions[followId];
-    if (allowed == null) return 'Checking access…';
-    if (allowed.isEmpty) return "Can't see any of your cards";
+    final raw = _permissions[followId];
+    if (raw == null) return 'Checking access…';
+    if (raw.isEmpty) return "Can't see any of your cards";
+    final allowed = _allowedSavedCardIds(followId);
     final names = Provider.of<AuthState>(context, listen: false).user.cards
-        .where((c) => allowed.contains(c.id))
+        .where((c) => c.isAddressable && allowed.contains(c.id))
         .map((c) => c.name)
         .toList();
     if (names.isEmpty) {
-      return 'Can see ${allowed.length} card${allowed.length == 1 ? '' : 's'}';
+      // Cards not loaded yet, or shared cards the user no longer holds.
+      return 'Can see ${raw.length} card${raw.length == 1 ? '' : 's'}';
     }
     return 'Can see ${names.join(', ')}';
   }
@@ -942,9 +989,9 @@ class _CircleScreenState extends State<CircleScreen> {
               (rows[i]['follow_id'] ?? '').toString(),
               (rows[i]['name'] ?? 'them').toString(),
               mode: _AccessMode.edit,
-              preselected:
-                  _permissions[(rows[i]['follow_id'] ?? '').toString()] ??
-                  const [],
+              preselected: _allowedSavedCardIds(
+                (rows[i]['follow_id'] ?? '').toString(),
+              ),
             ),
           ),
       ],
