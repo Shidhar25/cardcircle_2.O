@@ -92,3 +92,32 @@ Podfile's `platform :ios` line match.
 `PRODUCT_BUNDLE_IDENTIFIER` is `com.cardcircle.mobileFlutter`. Set a
 development team in Xcode → Signing & Capabilities before running on a
 device.
+
+## 6. Invite links — nothing to do here yet
+
+`Info.plist` already declares the `cardcircle://` custom URL scheme
+(`CFBundleURLTypes`), so `cardcircle://invite/<token>` opens the app on any
+device or simulator with it installed — no domain, deployment, or paid
+Apple Developer account needed. Test it with:
+
+```bash
+xcrun simctl openurl booted cardcircle://invite/SOME_TOKEN
+```
+
+The real `https://cardcircle.com/invite/<token>` link (Android's manifest
+already has a matching, currently-inert `https` intent-filter) needs two
+more things once that domain is live, both Mac/Apple-account steps:
+
+1. Host `apple-app-site-association` at
+   `https://cardcircle.com/.well-known/apple-app-site-association` (no
+   extension, served as `application/json`), listing this app's Team ID +
+   bundle ID.
+2. Xcode → Runner target → Signing & Capabilities → **+ Capability** →
+   Associated Domains → add `applinks:cardcircle.com`. This needs the same
+   paid Apple Developer account as push (§2) — Associated Domains is not
+   available on a free personal-team signing identity.
+
+Until both exist, tapping the `https://` link on iOS just opens Safari,
+which is expected — the `cardcircle://` scheme is what's used for testing
+in the meantime, and the app treats both link shapes identically once
+opened (see `lib/core/services/invite_link.dart`).

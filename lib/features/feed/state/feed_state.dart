@@ -195,6 +195,20 @@ class FeedState extends ChangeNotifier {
   Future<void> refreshAll() =>
       Future.wait([refresh(HackFeed.mine), refresh(HackFeed.circle)]);
 
+  /// Drops every held page and search term, with no refetch.
+  ///
+  /// Called on logout: without this, the next account to sign in on this
+  /// device sees the previous account's feed until they happen to pull to
+  /// refresh, because these pages are only ever replaced, never cleared.
+  void clearAll() {
+    _mine.reset();
+    _circle.reset();
+    _search.reset();
+    _query = '';
+    _category = null;
+    notifyListeners();
+  }
+
   /// Sets the search terms and loads the first page of results.
   ///
   /// A free-text query wins over a selected category: the server's text

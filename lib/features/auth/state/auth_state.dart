@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/logger_service.dart';
@@ -17,6 +18,31 @@ class AuthState extends ChangeNotifier {
   AuthState() {
     _initUser();
     _loadPersisted();
+    // FCM can rotate a device's token at any time (reinstall, app data
+    // clear, Google Play Services refresh) — not just at login. Without
+    // this, a rotated token is never told to the backend, the old one
+    // keeps getting sent to, and it eventually dies as "not-registered"
+    // with nothing replacing it: pushes just stop arriving until the next
+    // fresh login. Only forwarded while a profile is actually loaded, since
+    // there is no access token to attach it to before that.
+    //
+    // Guarded: `FirebaseMessaging.instance` throws synchronously when no
+    // Firebase app has been initialised, which is the case in every widget
+    // test that builds an `AuthState` without also calling
+    // `Firebase.initializeApp()` — this must not take the whole screen down
+    // with it.
+    try {
+      FirebaseMessaging.instance.onTokenRefresh.listen((token) async {
+        if (_profile == null) return;
+        await ApiService.registerPushToken(
+          token: token,
+          deviceType: DeviceService.platformLabel,
+          deviceName: await DeviceService.deviceName(),
+        );
+      });
+    } catch (e, s) {
+      LoggerService.error('Failed to listen for FCM token refresh', e, s);
+    }
   }
 
   bool get hasOnboarded => _hasOnboarded;
@@ -94,6 +120,12 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
     fetchUserCards();
     refreshProfileFromServer();
+    // The one place every login and signup passes through — this is what
+    // actually links a device's push token to this phone number's account.
+    // Requesting permission and a token any earlier (e.g. at app launch)
+    // had nowhere valid to send it: registration requires an access token,
+    // which does not exist before this point.
+    registerPushToken();
   }
 
   Future<void> refreshProfileFromServer() async {
