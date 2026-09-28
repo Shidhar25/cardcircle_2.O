@@ -69,6 +69,19 @@ class _CircleScreenState extends State<CircleScreen> {
   /// [_SyncPrompt] card below the tabs is for.
   bool _autoPromptShown = false;
 
+  /// Filters the Contacts tab by name or username. Only shown on that tab —
+  /// the other tabs are small enough that a search box would just be
+  /// clutter.
+  final TextEditingController _contactsSearchController =
+      TextEditingController();
+  String _contactsQuery = '';
+
+  @override
+  void dispose() {
+    _contactsSearchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _handleRefresh() async {
     final circleState = Provider.of<CircleState>(context, listen: false);
     final authState = Provider.of<AuthState>(context, listen: false);
@@ -867,6 +880,21 @@ class _CircleScreenState extends State<CircleScreen> {
                   child: _SyncPrompt(busy: _isSyncing, onSync: _performSync),
                 ),
 
+              if (_tabIndex == 3)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    AppSpacing.mdLg,
+                    AppSpacing.xl,
+                    0,
+                  ),
+                  child: _ContactSearchField(
+                    controller: _contactsSearchController,
+                    onChanged: (v) =>
+                        setState(() => _contactsQuery = v.trim().toLowerCase()),
+                  ),
+                ),
+
               Expanded(
                 child: RefreshIndicator(
                   onRefresh: _handleRefresh,
@@ -1088,40 +1116,57 @@ class _CircleScreenState extends State<CircleScreen> {
             return a.name.toLowerCase().compareTo(b.name.toLowerCase());
           });
 
+    final query = _contactsQuery;
+    final filtered = query.isEmpty
+        ? rows
+        : rows
+              .where(
+                (f) =>
+                    f.name.toLowerCase().contains(query) ||
+                    f.username.toLowerCase().contains(query),
+              )
+              .toList();
+
     return _shell(
       // With nothing matched there is nobody to invite by name, so the
       // empty state offers a link the user can send to anyone instead of
-      // being a dead end.
-      emptyAction: rows.isEmpty
+      // being a dead end. A search with no hits gets its own message
+      // instead, since offering to invite by link there would be confusing
+      // — the person searched for probably already has an account.
+      emptyAction: rows.isEmpty && query.isEmpty
           ? _InviteLinkButton(
               busy: _creatingLink,
               onTap: _handleShareInviteLink,
             )
           : null,
-      caption: rows.isEmpty
-          ? (_showSyncPrompt
+      caption: filtered.isEmpty
+          ? (query.isNotEmpty
+                ? 'No contacts match "$_contactsQuery".'
+                : _showSyncPrompt
                 ? 'Sync your contacts to find people you already know — or '
                       'send someone an invite link.'
                 : 'No contacts matched yet. Send someone an invite link to '
                       'get started.')
-          : '${rows.where((f) => f.action.isMatchedUser).length} contacts matched',
+          : '${filtered.where((f) => f.action.isMatchedUser).length} contacts matched',
       children: [
-        for (var i = 0; i < rows.length; i++)
+        for (var i = 0; i < filtered.length; i++)
           _NetworkRow(
-            initials: rows[i].initials,
+            initials: filtered[i].initials,
             hue: AvatarHue.values[i % AvatarHue.values.length],
-            title: rows[i].name,
-            subtitle: rows[i].action == ContactAction.inviteOnly
+            title: filtered[i].name,
+            subtitle: filtered[i].action == ContactAction.inviteOnly
                 ? 'Not on CardCircle'
-                : rows[i].username,
+                : filtered[i].username,
             trailing: _ContactAction(
-              action: rows[i].action,
+              action: filtered[i].action,
               busy:
-                  _pendingFollowIds.contains(rows[i].id) ||
-                  _invitingIds.contains(rows[i].contactId),
-              onFollow: () => _handleToggleFollow(rows[i].id, rows[i].name),
+                  _pendingFollowIds.contains(filtered[i].id) ||
+                  _invitingIds.contains(filtered[i].contactId),
+              onFollow: () =>
+                  _handleToggleFollow(filtered[i].id, filtered[i].name),
               onRespond: () => setState(() => _tabIndex = 2),
-              onInvite: () => _handleInvite(rows[i].contactId, rows[i].name),
+              onInvite: () =>
+                  _handleInvite(filtered[i].contactId, filtered[i].name),
             ),
           ),
       ],
@@ -1400,6 +1445,68 @@ class _SyncPrompt extends StatelessWidget {
                       ),
                     ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Search box for the Contacts tab, filtering by name or username.
+class _ContactSearchField extends StatelessWidget {
+  final TextEditingController controller;
+  final ValueChanged<String> onChanged;
+
+  const _ContactSearchField({required this.controller, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 42,
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.mdLg),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppRadii.pill),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            PhosphorIconsRegular.magnifyingGlass,
+            size: 16,
+            color: AppColors.textDim,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: TextField(
+              controller: controller,
+              onChanged: onChanged,
+              style: AppText.sans(13, color: AppColors.text),
+              cursorColor: AppColors.gold,
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: 'Search contacts',
+                hintStyle: AppText.sans(13, color: AppColors.textFaint),
+              ),
+            ),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              if (value.text.isEmpty) return const SizedBox.shrink();
+              return GestureDetector(
+                onTap: () {
+                  controller.clear();
+                  onChanged('');
+                },
+                child: const Icon(
+                  PhosphorIconsRegular.x,
+                  size: 15,
+                  color: AppColors.textDim,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -1823,7 +1930,16 @@ class _ContactAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (busy) {
+    // Inviting has no optimistic state to show mid-flight — a contact
+    // stays `inviteOnly` until the server actually creates an account for
+    // them — so a spinner is the only feedback available there.
+    //
+    // A follow/unfollow tap is different: [CircleState.toggleFollow] flips
+    // the pill's label the instant it's tapped, before the request
+    // resolves. Replacing that label with a spinner would hide the very
+    // feedback the tap just produced, so those states stay visible and are
+    // merely dimmed and untappable while the request is in flight.
+    if (busy && action == ContactAction.inviteOnly) {
       return const SizedBox(
         width: 20,
         height: 20,
@@ -1834,6 +1950,14 @@ class _ContactAction extends StatelessWidget {
       );
     }
 
+    final child = _buildForAction(context);
+    if (!busy) return child;
+    return IgnorePointer(
+      child: Opacity(opacity: 0.6, child: child),
+    );
+  }
+
+  Widget _buildForAction(BuildContext context) {
     switch (action) {
       case ContactAction.follow:
         return _SmallButton(label: 'Follow', primary: true, onTap: onFollow);

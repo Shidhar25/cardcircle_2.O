@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -6,6 +7,7 @@ import '../../shared/models/card_network.dart';
 import '../../shared/models/otp_send_result.dart';
 import 'api_result.dart';
 import 'auth_http_client.dart';
+import 'device_service.dart';
 import 'session_service.dart';
 import '../../shared/models/feedback_question.dart';
 import '../../shared/models/paged_result.dart';
@@ -134,6 +136,13 @@ class ApiService {
   /// they run out. Returning a nullable map threw that away and left the
   /// screen saying "Invalid OTP code" right up until the request was locked,
   /// with no warning that it was about to be. The result carries it through.
+  ///
+  /// Also where the device that is logging in identifies itself
+  /// (`device_id`/`app_version`/`os_version`). This used to go unsent, so
+  /// the backend's own device row for every OTP login was created with
+  /// `device_id: null` — device-token de-duplication is keyed on the push
+  /// token itself now, not this id, but the id is still what associates a
+  /// login with a specific install rather than "null".
   static Future<ApiResult<Map<String, dynamic>>> verifyOtp(
     String requestId,
     String otp,
@@ -143,7 +152,13 @@ class ApiService {
       final response = await _client.post(
         Uri.parse('$baseUrl/otp/verify'),
         headers: _headers(),
-        body: jsonEncode({'requestId': requestId, 'otp': otp}),
+        body: jsonEncode({
+          'requestId': requestId,
+          'otp': otp,
+          'device_id': await DeviceService.deviceId(),
+          'app_version': await DeviceService.appVersion(),
+          'os_version': await DeviceService.osVersion(),
+        }),
       );
       final result = ApiResult.fromResponse(response, action: 'Verify OTP');
       if (result.ok) {
@@ -1220,6 +1235,70 @@ class ApiService {
     }
   }
 
+  /// Previews an invite token (`GET /invites/{token}`), before anyone has
+  /// signed in.
+  ///
+  /// Deliberately unauthenticated — this is the very first thing a tapped
+  /// invite link does, often before the recipient has an account at all, so
+  /// there is no access token to send yet. The response is who sent the
+  /// invite, so the app can show "X invited you" before asking for a phone
+  /// number.
+  static Future<ApiResult<Map<String, dynamic>>> getInvitePreview(
+    String token,
+  ) async {
+    try {
+      LoggerService.info('Fetching invite preview for token $token...');
+      final response = await _client.get(
+        Uri.parse('$baseUrl/invites/$token'),
+        headers: _headers(),
+      );
+      return ApiResult.fromResponse(response, action: 'Get invite preview');
+    } catch (e, stack) {
+      LoggerService.error('Error fetching invite preview', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
+  /// Redeems an invite token (`POST /invites/{token}/redeem`), creating a
+  /// follow request from the signed-in caller back to whoever sent the
+  /// invite.
+  ///
+  /// Requires auth — called once the recipient has an account, either right
+  /// after they finish onboarding through this link or, if they already had
+  /// one, the moment the link opens. The server enforces the one-time
+  /// nature of a token: redeeming an already-`CONSUMED` token returns a 400
+  /// ("already been used") rather than creating a second request, so a
+  /// double-tap or a relaunched deep link cannot send duplicate follow
+  /// requests — this is surfaced via the normal failure path, not treated
+  /// as an exception.
+  ///
+  /// A targeted invite (created for one address-book contact) also carries
+  /// that contact's phone number now, and the server answers with 403 if
+  /// the redeemer's own number does not match — so forwarding the link to
+  /// someone else does not let them redeem it as if they were the intended
+  /// recipient. See [InviteLink.redeemFailureMessage] for the copy this
+  /// maps to, which is deliberately not the generic "session expired" 403
+  /// reading the rest of the app uses.
+  static Future<ApiResult<Map<String, dynamic>>> redeemInvite(
+    String token,
+  ) async {
+    try {
+      LoggerService.info('Redeeming invite token $token...');
+      final response = await _client.post(
+        Uri.parse('$baseUrl/invites/$token/redeem'),
+        headers: _headers(requireAuth: true),
+      );
+      return ApiResult.fromResponse(response, action: 'Redeem invite');
+    } catch (e, stack) {
+      LoggerService.error('Error redeeming invite token $token', e, stack);
+      return const ApiResult.failure(
+        'Could not reach the server. Check your connection.',
+      );
+    }
+  }
+
   /// The cards a person you follow has shared with you
   /// (`GET /follow/following/{followId}/cards`).
   static Future<List<Map<String, dynamic>>?> getSharedCards(
@@ -1451,6 +1530,10 @@ class ApiService {
           'token': token,
           'device_type': deviceType,
           'device_name': deviceName,
+          // De-duplication now keys on the token itself, but the id is
+          // still what the backend has to go on when telling two logins
+          // on the same phone apart.
+          'device_id': await DeviceService.deviceId(),
         }),
       );
       final body = jsonDecode(response.body);
@@ -1504,10 +1587,53 @@ class ApiService {
     return null;
   }
 
+  /// Signs out on this device.
+  ///
+  /// Local state is cleared first, unconditionally — the user is signed out
+  /// the instant this returns, whatever happens to the network call below.
+  /// This is also the single choke point every forced logout already runs
+  /// through (an unrecoverable 401, a rejected refresh — see
+  /// [_endSession]), so clearing first means none of those call this again
+  /// on the way out.
+  ///
+  /// The server notification is fire-and-forget: it used to be awaited with
+  /// a 5s timeout, which meant a slow or unreachable network held up the
+  /// logout button for up to 5 seconds — long enough that a user would tap
+  /// it again, thinking the first tap did nothing. Nothing downstream of
+  /// this call needs the network round trip to finish; the account is
+  /// already signed out locally by the time this returns.
   static Future<void> logout() async {
+    final token = _accessToken;
     _accessToken = null;
     _refreshToken = null;
     await LocalStorageService.remove('@auth/accessToken');
     await LocalStorageService.remove('@auth/refreshToken');
+
+    if (token == null || token.isEmpty) return;
+
+    // Best-effort: tells the server to deactivate this device's push
+    // tokens, so a signed-out device stops receiving notifications for the
+    // account it just left. Deliberately the plain http client, not
+    // [_client] — that one refreshes on a 401 and would call this exact
+    // method again if the token below turns out to be the one that's
+    // already expired, which is a real possibility on a forced logout.
+    unawaited(_notifyServerOfLogout(token));
+  }
+
+  static Future<void> _notifyServerOfLogout(String token) async {
+    try {
+      await http
+          .post(
+            Uri.parse('$baseUrl/auth/logout'),
+            headers: {
+              'accept': 'application/json',
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+    } catch (e, stack) {
+      LoggerService.error('Error notifying server of logout', e, stack);
+    }
   }
 }

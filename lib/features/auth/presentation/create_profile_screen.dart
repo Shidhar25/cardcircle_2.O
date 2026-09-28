@@ -5,8 +5,13 @@ import 'package:provider/provider.dart';
 import '../../../core/config/remote_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
+import '../../../core/services/invite_link.dart';
+import '../../../core/services/logger_service.dart';
+import '../../../core/services/pending_invite.dart';
+import '../../../main.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
+import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/legal_text.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -257,6 +262,52 @@ class _CreateProfileScreenState extends State<CreateProfileScreen>
         ),
       );
       if (mounted) Navigator.pushNamed(context, '/select-tags');
+      // Fires after navigating on, not before: redeeming is a courtesy on
+      // top of a signup that has already succeeded, and its own network
+      // round trip must not hold up getting the new user into the app. Any
+      // outcome is reported through the app-wide messenger rather than
+      // this screen's — by the time the response lands, this screen is
+      // gone.
+      _redeemPendingInviteIfAny();
+    }
+  }
+
+  /// Completes the "onboard, then follow the inviter" flow from an invite
+  /// link tapped before this account existed.
+  ///
+  /// [InvitePreviewScreen] cannot redeem the token itself when the visitor
+  /// has no account yet — [ApiService.redeemInvite] requires auth — so it
+  /// stashes the token in [PendingInvite] and sends them through this exact
+  /// screen. The moment a session exists (right after [saveProfile]
+  /// stores it), that stashed token is consumed and redeemed here. A
+  /// missing or already-expired/-consumed token is reported quietly: it
+  /// must never block or roll back a signup that already succeeded.
+  Future<void> _redeemPendingInviteIfAny() async {
+    final token = PendingInvite.consume();
+    if (token == null) return;
+
+    final result = await ApiService.redeemInvite(token);
+    LoggerService.info(
+      'Post-signup invite redeem for token $token: '
+      '${result.ok ? 'ok' : 'failed (${result.message})'}',
+    );
+    final messenger = appMessengerKey.currentState;
+    if (messenger == null) return;
+    if (result.ok) {
+      messenger.showSuccess(
+        result.display('Follow request sent to whoever invited you.'),
+      );
+    } else {
+      // Not `showResult` — its generic 403-means-"session expired" reading
+      // is wrong for this endpoint. See [InviteLink.redeemFailureMessage].
+      // A targeted invite link now carries the invited phone number and
+      // this new account may not be it (e.g. the link was forwarded to
+      // someone else), which is a real, expected outcome here — not a
+      // reason to suggest anything is wrong with the new account.
+      messenger.showError(
+        '${InviteLink.redeemFailureMessage(result)} Your account is set up '
+        'either way.',
+      );
     }
   }
 

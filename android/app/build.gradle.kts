@@ -16,6 +16,9 @@ dependencies {
 
     // Add the dependencies for any other desired Firebase products
     // https://firebase.google.com/docs/android/setup#available-libraries
+
+    // Required alongside isCoreLibraryDesugaringEnabled above.
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 android {
     namespace = "com.cardcircle.cardcircle"
@@ -25,6 +28,10 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // flutter_local_notifications requires this — it ships Java 8+ APIs
+        // (java.time, etc. under the hood) that need to be desugared for
+        // anything below API 26, which minSdk still allows.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {

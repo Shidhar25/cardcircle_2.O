@@ -41,18 +41,17 @@ class CircleState extends ChangeNotifier {
 
   /// Advances the relationship with [id] and reports what the server said.
   ///
-  /// The row updates the moment the call succeeds, because the previous
-  /// version only flipped a `isFollowing` bool that nothing rendered — the
-  /// pill reads `action.label`, so pressing Follow visibly did nothing at
-  /// all. The new state comes from the server's `status` when it sends one;
-  /// otherwise from what the endpoint means:
+  /// The pill flips the instant this is called — to `requestSent` or back
+  /// to `follow`, whichever the tap implies — rather than waiting out the
+  /// round trip first. A user tapping Follow wants to see it react now, not
+  /// after a network delay; a spinner for every tap made the whole screen
+  /// feel slow. The optimistic guess is reconciled with the server's actual
+  /// `status` on success, and rolled back to exactly what it was before the
+  /// tap if the call fails — so a rejected follow never leaves a pill
+  /// stuck showing a state the server didn't agree to.
   ///
   ///   * following  -> unfollow  -> follow (you may request again)
   ///   * follow     -> request   -> requestSent (it creates a *request*)
-  ///
-  /// Optimism is deliberately absent: the state changes only after the
-  /// server agrees, so a failed follow never shows a Following pill that
-  /// silently reverts on the next refresh.
   Future<ApiResult<Map<String, dynamic>>> toggleFollow(String id) async {
     final index = _friends.indexWhere((f) => f.id == id);
     final friend = index == -1 ? null : _friends[index];
@@ -67,15 +66,68 @@ class CircleState extends ChangeNotifier {
     // button do nothing; instead assume "not yet following" and let the
     // server arbitrate.
     final wasFollowing = friend?.action == ContactAction.following;
+    final previousAction = friend?.action;
     LoggerService.debug(
       'Toggling follow for $id (${friend?.action.name ?? 'not in directory'})',
     );
+
+    if (friend != null) {
+      final optimistic = wasFollowing
+          ? ContactAction.follow
+          : ContactAction.requestSent;
+      _friends[index] = friend.withAction(optimistic);
+      notifyListeners();
+    }
+
+    // The Followers tab's "follow back" button reads a different, raw row
+    // (`_followers`, keyed by `user_id`) rather than `_friends` — someone
+    // can follow you without being in your address book. Flip its
+    // `follow_back_status` the same way, so that pill reacts instantly too.
+    final followerRowIndex = friend == null
+        ? _followers.indexWhere((r) => r['user_id'] == id)
+        : -1;
+    final previousFollowBackStatus = followerRowIndex == -1
+        ? null
+        : _followers[followerRowIndex]['follow_back_status'];
+    if (followerRowIndex != -1) {
+      _followers[followerRowIndex] = {
+        ..._followers[followerRowIndex],
+        'follow_back_status': 'PENDING',
+      };
+      notifyListeners();
+    }
 
     final result = wasFollowing
         ? await ApiService.unfollowUser(id)
         : await ApiService.followUser(id);
 
-    if (!result.ok) return result;
+    if (!result.ok) {
+      // Roll back to exactly what it was before the tap — never guess a
+      // different failure state, since the server hasn't said anything
+      // actually changed.
+      if (friend != null && previousAction != null) {
+        final rollbackIndex = _friends.indexWhere((f) => f.id == id);
+        if (rollbackIndex != -1) {
+          _friends[rollbackIndex] = _friends[rollbackIndex].withAction(
+            previousAction,
+          );
+          notifyListeners();
+        }
+      }
+      if (followerRowIndex != -1) {
+        final rollbackRowIndex = _followers.indexWhere(
+          (r) => r['user_id'] == id,
+        );
+        if (rollbackRowIndex != -1) {
+          _followers[rollbackRowIndex] = {
+            ..._followers[rollbackRowIndex],
+            'follow_back_status': previousFollowBackStatus,
+          };
+          notifyListeners();
+        }
+      }
+      return result;
+    }
 
     final next = resolveAction(
       result.data?['status'] as String?,
@@ -83,8 +135,11 @@ class CircleState extends ChangeNotifier {
     );
 
     if (friend != null) {
-      _friends[index] = friend.withAction(next);
-      notifyListeners();
+      final settledIndex = _friends.indexWhere((f) => f.id == id);
+      if (settledIndex != -1) {
+        _friends[settledIndex] = _friends[settledIndex].withAction(next);
+        notifyListeners();
+      }
     } else {
       // Nothing local to update — re-read so the followers row reflects the
       // new relationship.
@@ -271,5 +326,19 @@ class CircleState extends ChangeNotifier {
     }
     await fetchIncomingRequests();
     await fetchFollowersAndFollowing();
+  }
+
+  /// Drops every list held for the signed-out account.
+  ///
+  /// Called on logout: without this, the next account to sign in on this
+  /// device would briefly see the previous account's contacts, followers
+  /// and requests until each list happened to refetch.
+  void clear() {
+    _friends = [];
+    _incomingRequests = [];
+    _outgoingRequests = [];
+    _followers = [];
+    _following = [];
+    notifyListeners();
   }
 }

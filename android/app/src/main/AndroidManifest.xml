@@ -32,12 +32,48 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Invite links, testable today with no domain or deployment:
+                 `cardcircle://invite/<token>` opens straight to this
+                 activity on any device with the app installed, since a
+                 custom scheme needs no server-side verification the way an
+                 https App Link does. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="cardcircle" android:host="invite"/>
+            </intent-filter>
+            <!-- The real link shared once cardcircle.com is live —
+                 `android:autoVerify="true"` requires
+                 https://cardcircle.com/.well-known/assetlinks.json to exist
+                 and list this app's package name + signing cert fingerprint
+                 first, or Android silently refuses to treat it as a verified
+                 App Link and falls back to showing a chooser instead of
+                 opening the app directly. Left enabled now so the same build
+                 picks it up the moment that file is published; it is a
+                 no-op locally since cardcircle.com does not resolve yet. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data
+                    android:scheme="https"
+                    android:host="cardcircle.com"
+                    android:pathPrefix="/invite"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- Matches NotificationService's channel id. Only affects a push
+             carrying a `notification` block, which Android displays itself
+             while backgrounded — this is what keeps that path on the same
+             styled channel instead of an auto-created "Miscellaneous" one. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="cardcircle_default" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

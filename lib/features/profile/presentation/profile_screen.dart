@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/services/api_service.dart';
+import '../../../core/services/notification_service.dart';
+import '../../../main.dart';
 import '../../auth/state/auth_state.dart';
 import '../state/category_state.dart';
 import '../../../shared/widgets/card_stack.dart';
@@ -68,6 +70,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showLogoutConfirmation(BuildContext context, AuthState authState) {
+    final screenContext = context;
     showDialog(
       context: context,
       builder: (context) {
@@ -97,17 +100,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             TextButton(
-              onPressed: () async {
+              onPressed: () {
                 Navigator.pop(context);
-                await ApiService.logout();
-                await authState.logout();
-                if (context.mounted) {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/login',
-                    (route) => false,
-                  );
-                }
+                if (screenContext.mounted) performLogout(screenContext);
               },
               child: Text(
                 'Log out',
@@ -520,6 +515,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               },
                             ),
                           ),
+                          if (kDebugMode)
+                            _SettingsRow(
+                              label: 'Send test notification',
+                              icon: PhosphorIconsRegular.bellRinging,
+                              onTap: () => NotificationService.debugShowFakePush(
+                                title: 'Test notification',
+                                body:
+                                    'Tap this to confirm it opens the right '
+                                    'screen — no real push was sent.',
+                              ),
+                            ),
                           _SettingsRow(
                             label: 'Log out',
                             icon: PhosphorIconsRegular.signOut,

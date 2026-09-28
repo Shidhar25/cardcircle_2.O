@@ -95,5 +95,23 @@
 	<array>
 		<string>remote-notification</string>
 	</array>
+	<!-- Invite links, testable today with no domain, deployment, or paid
+	     Apple Developer account: `cardcircle://invite/<token>` opens
+	     straight to this app on any device it's installed on, since a
+	     custom scheme needs no server-side verification the way a
+	     Universal Link does. Tap-test it via Safari's address bar, Notes,
+	     iMessage, or `xcrun simctl openurl booted cardcircle://invite/TOKEN`
+	     on the simulator. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.cardcircle.invite</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>cardcircle</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>
