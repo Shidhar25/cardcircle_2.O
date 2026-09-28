@@ -297,25 +297,48 @@ class _CircleScreenState extends State<CircleScreen> {
     }
   }
 
-  /// Follow / unfollow, with the server's answer shown either way.
+  /// Follow / follow back / cancel a sent request, with the server's answer
+  /// shown either way.
   ///
   /// Previously the pill called `CircleState.toggleFollow` directly and
   /// discarded its result, so a rejected or failed follow looked exactly
   /// like a successful one: nothing happened and nothing was said.
-  Future<void> _handleToggleFollow(String id, String name) async {
+  ///
+  /// [currentAction] is the row's action *before* this tap — pass it from
+  /// any caller that has a [Friend] on hand (Contacts/Suggested) so the
+  /// confirmation reads correctly for a cancel or an unfollow, not just a
+  /// fresh follow; omitted from the Followers tab's "Follow back", which is
+  /// always starting from nothing.
+  Future<void> _handleToggleFollow(
+    String id,
+    String name, {
+    ContactAction? currentAction,
+  }) async {
     if (_pendingFollowIds.contains(id)) return;
 
     final messenger = ScaffoldMessenger.of(context);
     final circle = Provider.of<CircleState>(context, listen: false);
 
     setState(() => _pendingFollowIds.add(id));
-    final result = await circle.toggleFollow(id);
+    final result = await circle.toggleFollow(id, displayName: name);
     if (!mounted) return;
     setState(() => _pendingFollowIds.remove(id));
 
+    final String onSuccess;
+    switch (currentAction) {
+      case ContactAction.requestSent:
+        onSuccess = 'Request to $name cancelled.';
+        break;
+      case ContactAction.following:
+        onSuccess = 'Unfollowed $name.';
+        break;
+      default:
+        onSuccess = 'Follow request sent to $name.';
+    }
+
     messenger.showResult(
       result,
-      onSuccess: 'Follow request sent to $name.',
+      onSuccess: onSuccess,
       onFailure: 'Could not update your follow for $name.',
     );
   }
@@ -1009,9 +1032,17 @@ class _CircleScreenState extends State<CircleScreen> {
               (rows[i]['follow_id'] ?? '').toString(),
             ),
             followBack: FollowBackStatus.parse(rows[i]['follow_back_status']),
+            busy: _pendingFollowIds.contains(
+              (rows[i]['user_id'] ?? '').toString(),
+            ),
             onFollowBack: () => _handleToggleFollow(
               (rows[i]['user_id'] ?? '').toString(),
               (rows[i]['name'] ?? 'them').toString(),
+              currentAction:
+                  FollowBackStatus.parse(rows[i]['follow_back_status']) ==
+                      FollowBackStatus.requested
+                  ? ContactAction.requestSent
+                  : ContactAction.follow,
             ),
             onEditAccess: () => _showCardAccessSheet(
               (rows[i]['follow_id'] ?? '').toString(),
@@ -1162,8 +1193,11 @@ class _CircleScreenState extends State<CircleScreen> {
               busy:
                   _pendingFollowIds.contains(filtered[i].id) ||
                   _invitingIds.contains(filtered[i].contactId),
-              onFollow: () =>
-                  _handleToggleFollow(filtered[i].id, filtered[i].name),
+              onFollow: () => _handleToggleFollow(
+                filtered[i].id,
+                filtered[i].name,
+                currentAction: filtered[i].action,
+              ),
               onRespond: () => setState(() => _tabIndex = 2),
               onInvite: () =>
                   _handleInvite(filtered[i].contactId, filtered[i].name),
@@ -1278,9 +1312,11 @@ class _CircleScreenState extends State<CircleScreen> {
   Future<void> _handleUnfollow(String userId, String name) async {
     final messenger = ScaffoldMessenger.of(context);
     final circle = Provider.of<CircleState>(context, listen: false);
-    final result = await circle.toggleFollow(userId);
+    // toggleFollow already removes this row from Following optimistically
+    // (and restores it if the server refuses) — a follow-up refetch here
+    // would only re-fetch the same thing a beat later.
+    final result = await circle.toggleFollow(userId, displayName: name);
     if (!mounted) return;
-    await circle.fetchFollowersAndFollowing();
     messenger.showResult(
       result,
       onSuccess: 'Unfollowed $name.',
@@ -1715,6 +1751,13 @@ class _FollowerCard extends StatelessWidget {
   /// already mutual.
   final FollowBackStatus followBack;
 
+  /// True while this row's follow-back request is being sent or cancelled.
+  /// [onFollowBack] still fires the tap immediately underneath — the
+  /// pill's own label already reflects the optimistic state by the time
+  /// this turns true — so this only dims the control and blocks a second
+  /// tap while the round trip is in flight.
+  final bool busy;
+
   final VoidCallback onEditAccess;
   final VoidCallback onFollowBack;
 
@@ -1726,6 +1769,7 @@ class _FollowerCard extends StatelessWidget {
     required this.status,
     required this.permissionLine,
     required this.followBack,
+    this.busy = false,
     required this.onEditAccess,
     required this.onFollowBack,
   });
@@ -1813,21 +1857,34 @@ class _FollowerCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
-                child: _SmallButton(
-                  label: 'Follow back',
-                  primary: true,
-                  onTap: onFollowBack,
+                child: Opacity(
+                  opacity: busy ? 0.6 : 1,
+                  child: IgnorePointer(
+                    ignoring: busy,
+                    child: _SmallButton(
+                      label: 'Follow back',
+                      primary: true,
+                      onTap: onFollowBack,
+                    ),
+                  ),
                 ),
               ),
             ] else if (followBack == FollowBackStatus.requested) ...[
               const SizedBox(height: AppSpacing.sm),
               Align(
                 alignment: Alignment.centerRight,
-                child: MonoLabel(
-                  'FOLLOW BACK REQUESTED',
-                  size: 8.5,
-                  letterSpacing: 1.1,
-                  color: AppColors.textFaint,
+                // Tapping cancels: the same tear-down path Requests > Sent
+                // uses, so cancelling from either screen keeps both in
+                // sync instead of only one of them noticing.
+                child: Opacity(
+                  opacity: busy ? 0.6 : 1,
+                  child: IgnorePointer(
+                    ignoring: busy,
+                    child: _SmallButton(
+                      label: 'Requested',
+                      onTap: onFollowBack,
+                    ),
+                  ),
                 ),
               ),
             ],

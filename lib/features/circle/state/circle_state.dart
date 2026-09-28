@@ -41,63 +41,113 @@ class CircleState extends ChangeNotifier {
 
   /// Advances the relationship with [id] and reports what the server said.
   ///
-  /// The pill flips the instant this is called — to `requestSent` or back
-  /// to `follow`, whichever the tap implies — rather than waiting out the
-  /// round trip first. A user tapping Follow wants to see it react now, not
-  /// after a network delay; a spinner for every tap made the whole screen
-  /// feel slow. The optimistic guess is reconciled with the server's actual
-  /// `status` on success, and rolled back to exactly what it was before the
-  /// tap if the call fails — so a rejected follow never leaves a pill
-  /// stuck showing a state the server didn't agree to.
+  /// The pill flips the instant this is called, before the round trip —
+  /// to `requestSent`/`open`->`PENDING`, or back to `follow`/removed from
+  /// Following & Requests-Sent, whichever the tap implies — and is rolled
+  /// back to exactly what it was if the server rejects it. A user tapping
+  /// Follow, Follow back, or Requested-to-cancel wants to see it react now,
+  /// not after a network delay or a manual pull-to-refresh, and every tab
+  /// reads this same [CircleState], so the update is dynamic across
+  /// Following, Followers, Requests and Contacts/Suggested at once rather
+  /// than only wherever the tap happened.
   ///
-  ///   * following  -> unfollow  -> follow (you may request again)
-  ///   * follow     -> request   -> requestSent (it creates a *request*)
-  Future<ApiResult<Map<String, dynamic>>> toggleFollow(String id) async {
+  ///   * following   -> unfollow -> follow    (you may request again)
+  ///   * requestSent -> unfollow -> follow    (cancelling; same endpoint as
+  ///                                           [cancelOutgoing] — the server
+  ///                                           just tears down whichever
+  ///                                           relationship exists)
+  ///   * follow      -> request  -> requestSent (it creates a *request*)
+  ///
+  /// [id] can be a synced contact (in `_friends`), someone already in
+  /// `_following` who was never a synced contact (followed from search or
+  /// a benefit's detail page), a follower being followed back (in
+  /// `_followers`, via `follow_back_status`), a row in `_outgoingRequests`,
+  /// or any combination — all matching rows are updated together so no tab
+  /// is left showing a stale relationship. [displayName] names the new
+  /// `_outgoingRequests` row a fresh follow adds, for a caller (the
+  /// Followers tab's "Follow back") with no `_friends` row to read a name
+  /// from.
+  Future<ApiResult<Map<String, dynamic>>> toggleFollow(
+    String id, {
+    String? displayName,
+  }) async {
     final index = _friends.indexWhere((f) => f.id == id);
     final friend = index == -1 ? null : _friends[index];
 
-    if (friend != null && !friend.action.isActionable) {
+    // Only these three ever reach here from the UI: Follow, Follow back
+    // (both create a request) and Requested (cancels one). Everything else
+    // — self, blocked, inviteOnly (has its own Invite flow), following
+    // itself only via a dedicated Unfollow control — has no path to this
+    // method at all, but is still rejected defensively.
+    if (friend != null &&
+        friend.action != ContactAction.follow &&
+        friend.action != ContactAction.following &&
+        friend.action != ContactAction.requestSent) {
       return const ApiResult.failure('No action available for this contact.');
     }
 
-    // Someone can follow you without being in your address book, so the
-    // Followers tab offers a follow-back for people who are not in
-    // `_friends` at all. Treating an unknown id as an error made that
-    // button do nothing; instead assume "not yet following" and let the
-    // server arbitrate.
-    final wasFollowing = friend?.action == ContactAction.following;
-    final previousAction = friend?.action;
-    LoggerService.debug(
-      'Toggling follow for $id (${friend?.action.name ?? 'not in directory'})',
+    final followingIndex = _following.indexWhere((f) => f['user_id'] == id);
+    final followerIndex = _followers.indexWhere((f) => f['user_id'] == id);
+    final outgoingIndex = _outgoingRequests.indexWhere(
+      (r) => r['following_user_id'] == id,
     );
 
-    if (friend != null) {
-      final optimistic = wasFollowing
-          ? ContactAction.follow
-          : ContactAction.requestSent;
-      _friends[index] = friend.withAction(optimistic);
-      notifyListeners();
-    }
+    // Whether this tap tears an existing relationship down (unfollow, or
+    // cancelling a request already sent) rather than starting one. Reading
+    // this from `_friends` alone meant unfollowing someone who was never a
+    // synced contact (followed via search, or a benefit's detail page) read
+    // as "not following" and sent a fresh follow *request* instead — and a
+    // sent-request row (`requestSent`) needs the same tear-down endpoint as
+    // an unfollow, not another follow attempt.
+    final tearingDown =
+        friend?.action == ContactAction.following ||
+        friend?.action == ContactAction.requestSent ||
+        followingIndex != -1 ||
+        outgoingIndex != -1;
+    LoggerService.debug(
+      'Toggling follow for $id (${friend?.action.name ?? 'not in directory'}, '
+      'tearingDown=$tearingDown)',
+    );
 
-    // The Followers tab's "follow back" button reads a different, raw row
-    // (`_followers`, keyed by `user_id`) rather than `_friends` — someone
-    // can follow you without being in your address book. Flip its
-    // `follow_back_status` the same way, so that pill reacts instantly too.
-    final followerRowIndex = friend == null
-        ? _followers.indexWhere((r) => r['user_id'] == id)
-        : -1;
-    final previousFollowBackStatus = followerRowIndex == -1
+    final previousAction = friend?.action;
+    final previousFollowBackStatus = followerIndex == -1
         ? null
-        : _followers[followerRowIndex]['follow_back_status'];
-    if (followerRowIndex != -1) {
-      _followers[followerRowIndex] = {
-        ..._followers[followerRowIndex],
-        'follow_back_status': 'PENDING',
-      };
-      notifyListeners();
-    }
+        : _followers[followerIndex]['follow_back_status'];
+    final removedFollowingRow = followingIndex == -1
+        ? null
+        : _following[followingIndex];
+    final removedOutgoingRow = outgoingIndex == -1
+        ? null
+        : _outgoingRequests[outgoingIndex];
+    final name =
+        friend?.name ??
+        displayName ??
+        (followerIndex == -1
+            ? null
+            : _followers[followerIndex]['name']?.toString()) ??
+        'them';
 
-    final result = wasFollowing
+    _applyFollowState(
+      friendId: id,
+      followerId: id,
+      following: tearingDown ? ContactAction.follow : ContactAction.requestSent,
+      followBackStatus: tearingDown ? null : 'PENDING',
+    );
+    if (tearingDown) {
+      if (followingIndex != -1) _following.removeAt(followingIndex);
+      if (outgoingIndex != -1) _outgoingRequests.removeAt(outgoingIndex);
+    } else {
+      // A fresh request shows up in Requests > Sent immediately too, not
+      // just as this row's own pill.
+      _outgoingRequests.insert(0, {
+        'following_user_id': id,
+        'following_display_name': name,
+        'status': 'PENDING',
+      });
+    }
+    notifyListeners();
+
+    final result = tearingDown
         ? await ApiService.unfollowUser(id)
         : await ApiService.followUser(id);
 
@@ -105,48 +155,72 @@ class CircleState extends ChangeNotifier {
       // Roll back to exactly what it was before the tap — never guess a
       // different failure state, since the server hasn't said anything
       // actually changed.
-      if (friend != null && previousAction != null) {
-        final rollbackIndex = _friends.indexWhere((f) => f.id == id);
-        if (rollbackIndex != -1) {
-          _friends[rollbackIndex] = _friends[rollbackIndex].withAction(
-            previousAction,
+      _applyFollowState(
+        friendId: id,
+        followerId: id,
+        following: previousAction,
+        followBackStatus: previousFollowBackStatus,
+      );
+      if (tearingDown) {
+        if (removedFollowingRow != null) {
+          _following.insert(
+            followingIndex.clamp(0, _following.length),
+            removedFollowingRow,
           );
-          notifyListeners();
         }
-      }
-      if (followerRowIndex != -1) {
-        final rollbackRowIndex = _followers.indexWhere(
-          (r) => r['user_id'] == id,
-        );
-        if (rollbackRowIndex != -1) {
-          _followers[rollbackRowIndex] = {
-            ..._followers[rollbackRowIndex],
-            'follow_back_status': previousFollowBackStatus,
-          };
-          notifyListeners();
+        if (removedOutgoingRow != null) {
+          _outgoingRequests.insert(
+            outgoingIndex.clamp(0, _outgoingRequests.length),
+            removedOutgoingRow,
+          );
         }
+      } else {
+        _outgoingRequests.removeWhere((r) => r['following_user_id'] == id);
       }
+      notifyListeners();
       return result;
     }
 
     final next = resolveAction(
       result.data?['status'] as String?,
-      wasFollowing: wasFollowing,
+      wasFollowing: tearingDown,
     );
-
-    if (friend != null) {
-      final settledIndex = _friends.indexWhere((f) => f.id == id);
-      if (settledIndex != -1) {
-        _friends[settledIndex] = _friends[settledIndex].withAction(next);
-        notifyListeners();
-      }
-    } else {
-      // Nothing local to update — re-read so the followers row reflects the
-      // new relationship.
-      await fetchFollowersAndFollowing();
-    }
+    _applyFollowState(friendId: id, following: next);
+    notifyListeners();
     return result;
   }
+
+  /// Writes [following] and/or [followBackStatus] onto whichever of
+  /// `_friends` / `_followers` currently has a row for this id, leaving
+  /// lists with no matching row untouched. Centralised so `toggleFollow`'s
+  /// optimistic-apply, its rollback, and its post-success reconciliation
+  /// all touch the same two lists the same way rather than three
+  /// hand-copied blocks that could drift apart.
+  void _applyFollowState({
+    required String friendId,
+    String? followerId,
+    ContactAction? following,
+    Object? followBackStatus = _unset,
+  }) {
+    if (following != null) {
+      final i = _friends.indexWhere((f) => f.id == friendId);
+      if (i != -1) _friends[i] = _friends[i].withAction(following);
+    }
+    if (followerId != null && !identical(followBackStatus, _unset)) {
+      final i = _followers.indexWhere((f) => f['user_id'] == followerId);
+      if (i != -1) {
+        _followers[i] = {
+          ..._followers[i],
+          'follow_back_status': followBackStatus,
+        };
+      }
+    }
+  }
+
+  /// Sentinel distinguishing "leave `follow_back_status` alone" from
+  /// "set it to null" — a real, valid value meaning "open" (see
+  /// [FollowBackStatus.parse]).
+  static const Object _unset = Object();
 
   /// Maps the follow endpoints' `data.status` onto a [ContactAction].
   ///
@@ -245,25 +319,79 @@ class CircleState extends ChangeNotifier {
   List<Map<String, dynamic>> _outgoingRequests = [];
   List<Map<String, dynamic>> get outgoingRequests => _outgoingRequests;
 
+  /// A request still worth showing under Requests > Sent.
+  ///
+  /// The server keeps the row around after it settles rather than deleting
+  /// it, so `APPROVED`/`REJECTED`/`CANCELLED`/`BLOCKED` all still come back
+  /// from `GET /follow/requests/outgoing` — without filtering, an approved
+  /// request sat in "Sent" forever with a stray Cancel button that no
+  /// longer did anything meaningful. Missing `status` is kept: several call
+  /// sites default it to `'PENDING'` on the assumption an omitted status
+  /// means still-pending.
+  static bool _isPendingOutgoing(Map<String, dynamic> row) {
+    final status = (row['status'] as String?)?.trim().toUpperCase();
+    return status == null || status.isEmpty || status == 'PENDING';
+  }
+
   Future<void> fetchOutgoingRequests() async {
     final list = await ApiService.getOutgoingFollowRequests();
     if (list != null) {
-      _outgoingRequests = list;
+      _outgoingRequests = list.where(_isPendingOutgoing).toList();
       notifyListeners();
     }
   }
 
   /// Cancels a request you sent. Same endpoint as unfollow — the server
   /// cancels whichever relationship exists with that recipient.
-  Future<ApiResult<Map<String, dynamic>>> cancelOutgoing(String userId) async {
+  ///
+  /// Optimistic, like [toggleFollow]: the row disappears from Sent and the
+  /// matching Contacts/Suggested and Followers ("follow back requested")
+  /// rows flip back immediately, rolled back if the server refuses.
+  Future<ApiResult<Map<String, dynamic>>> cancelOutgoing(
+    String userId,
+  ) async {
+    final outgoingIndex = _outgoingRequests.indexWhere(
+      (r) => r['following_user_id'] == userId,
+    );
+    final removedOutgoingRow = outgoingIndex == -1
+        ? null
+        : _outgoingRequests[outgoingIndex];
+
+    final friendIndex = _friends.indexWhere((f) => f.id == userId);
+    final previousAction = friendIndex == -1
+        ? null
+        : _friends[friendIndex].action;
+
+    final followerIndex = _followers.indexWhere(
+      (f) => f['user_id'] == userId,
+    );
+    final previousFollowBackStatus = followerIndex == -1
+        ? null
+        : _followers[followerIndex]['follow_back_status'];
+
+    if (outgoingIndex != -1) _outgoingRequests.removeAt(outgoingIndex);
+    _applyFollowState(
+      friendId: userId,
+      followerId: userId,
+      following: ContactAction.follow,
+      followBackStatus: null,
+    );
+    notifyListeners();
+
     final result = await ApiService.unfollowUser(userId);
-    if (result.ok) {
-      _outgoingRequests.removeWhere((r) => r['following_user_id'] == userId);
-      // The directory row for this person goes back to "follow".
-      final i = _friends.indexWhere((f) => f.id == userId);
-      if (i != -1) {
-        _friends[i] = _friends[i].withAction(ContactAction.follow);
+    if (!result.ok) {
+      if (removedOutgoingRow != null) {
+        _outgoingRequests.insert(
+          outgoingIndex.clamp(0, _outgoingRequests.length),
+          removedOutgoingRow,
+        );
       }
+      _applyFollowState(
+        friendId: userId,
+        followerId: userId,
+        following: previousAction,
+        followBackStatus: previousFollowBackStatus,
+      );
       notifyListeners();
     }
     return result;
