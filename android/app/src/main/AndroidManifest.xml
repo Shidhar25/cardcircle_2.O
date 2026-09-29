@@ -85,5 +85,13 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Android 11+ hides every app from package visibility by default
+             (see the link above); without this, url_launcher's tel: intent
+             for the review-requesters call button silently fails to open
+             the dialer on those devices even though the code is correct. -->
+        <intent>
+            <action android:name="android.intent.action.DIAL"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

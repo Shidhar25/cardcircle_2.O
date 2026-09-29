@@ -1325,6 +1325,43 @@ class ApiService {
     return null;
   }
 
+  /// Who in your network already holds [cardId] and would let you see it
+  /// (`GET /follow/cards/{cardId}/review-requesters`).
+  ///
+  /// For a card the caller does *not* have yet — the review-request
+  /// button lives on the Add Cards catalog, not the wallet — this is the
+  /// route to "ask someone who does". A match requires an APPROVED follow
+  /// *and* that person's `follow_card_permissions.is_allowed` for this
+  /// card, so the list is only ever people who already chose to let this
+  /// caller see it; each row ships a ready-to-send `whatsapp_url` with a
+  /// prefilled "could you share your review of it with me?" message, the
+  /// same shape as [inviteContact]'s and [createInviteLink]'s links.
+  static Future<List<Map<String, dynamic>>?> getReviewRequesters(
+    String cardId,
+  ) async {
+    try {
+      LoggerService.info('Fetching review requesters for card $cardId...');
+      final response = await _client.get(
+        Uri.parse('$baseUrl/follow/cards/$cardId/review-requesters'),
+        headers: _headers(requireAuth: true),
+      );
+      final body = jsonDecode(response.body);
+      if (response.statusCode == 200 && body['success'] == true) {
+        final raw = body['data'];
+        return raw is List
+            ? raw.whereType<Map<String, dynamic>>().toList()
+            : [];
+      }
+      LoggerService.warning(
+        'Review requesters fetch failed: '
+        '${response.statusCode} - ${response.body}',
+      );
+    } catch (e, stack) {
+      LoggerService.error('Error fetching review requesters', e, stack);
+    }
+    return null;
+  }
+
   /// Which of *your* cards a follower may see
   /// (`GET /follow/permissions/{followId}`).
   ///
