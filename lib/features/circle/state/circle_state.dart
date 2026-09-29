@@ -27,6 +27,17 @@ class CircleState extends ChangeNotifier {
   List<Map<String, dynamic>> _incomingRequests = [];
   List<Map<String, dynamic>> get incomingRequests => _incomingRequests;
 
+  /// A request still worth showing under Requests > Incoming.
+  ///
+  /// Same reasoning as [_isPendingOutgoing]: `GET /follow/requests/incoming`
+  /// keeps a row around after it settles, so without filtering an
+  /// already-approved/rejected request sat there forever with live
+  /// Approve/Reject buttons that no longer did anything meaningful.
+  static bool _isPendingIncoming(Map<String, dynamic> row) {
+    final status = (row['status'] as String?)?.trim().toUpperCase();
+    return status == null || status.isEmpty || status == 'PENDING';
+  }
+
   List<Map<String, dynamic>> _followers = [];
   List<Map<String, dynamic>> get followersList => _followers;
 
@@ -268,7 +279,7 @@ class CircleState extends ChangeNotifier {
     notifyListeners();
     final list = await ApiService.getIncomingFollowRequests();
     if (list != null) {
-      _incomingRequests = list;
+      _incomingRequests = list.where(_isPendingIncoming).toList();
     }
     _isLoadingIncoming = false;
     notifyListeners();
