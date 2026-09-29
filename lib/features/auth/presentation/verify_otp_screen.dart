@@ -9,6 +9,7 @@ import '../../../core/services/logger_service.dart';
 import '../../../core/services/api_result.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/otp_session.dart';
+import '../../../core/services/pending_invite.dart';
 import '../../auth/state/auth_state.dart';
 import '../../../shared/models/models.dart';
 import '../../../shared/widgets/gritty_background.dart';
@@ -231,6 +232,12 @@ class _VerifyOTPScreenState extends State<VerifyOTPScreen>
       ),
     );
     if (mounted) Navigator.pushReplacementNamed(context, '/home');
+    // Fires after navigating on, not before — see
+    // [PendingInvite.redeemIfAny]. This is the returning-user path (an
+    // existing account, no create-profile step in between); the new-user
+    // path redeems from [CreateProfileScreen] instead, right after its own
+    // profile save.
+    PendingInvite.redeemIfAny();
   }
 
   /// Turns a failed verification into something actionable.

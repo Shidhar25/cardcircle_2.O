@@ -4,6 +4,7 @@ import '../../../core/config/remote_config.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/services/otp_session.dart';
+import '../../../core/services/pending_invite.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/legal_text.dart';
 import '../../../shared/widgets/primitives.dart';
@@ -35,9 +36,25 @@ class _LoginScreenState extends State<LoginScreen>
   String _errorText = '';
   bool _isLoading = false;
 
+  /// The token an invite link stashed before this screen opened, peeked
+  /// (not consumed) so unchecking the box below and re-checking it can
+  /// restore exactly what was pending — see [_onInviteCheckboxChanged].
+  String? _pendingInviteToken;
+  String? _invitedByName;
+
+  /// Whether the "Invited by ..." box is ticked. Starts true: arriving via
+  /// an invite link is itself the signal that following the inviter back
+  /// is wanted, so the default matches that intent rather than making
+  /// every new sign-up opt in again to something they already asked for
+  /// by tapping the link.
+  bool _followInviteChecked = true;
+
   @override
   void initState() {
     super.initState();
+
+    _pendingInviteToken = PendingInvite.peekToken();
+    _invitedByName = PendingInvite.inviterName;
 
     _shakeController = AnimationController(
       vsync: this,
@@ -112,6 +129,21 @@ class _LoginScreenState extends State<LoginScreen>
           result.message ?? 'Could not send the code. Please try again.',
     );
     _shakeController.forward(from: 0.0);
+  }
+
+  /// Ticking the box back on only works because [_pendingInviteToken] was
+  /// peeked (not consumed) in [initState] — [PendingInvite] itself was
+  /// already cleared the instant the box was unchecked, so without a local
+  /// copy there would be nothing left to remember back.
+  void _onInviteCheckboxChanged(bool checked) {
+    setState(() => _followInviteChecked = checked);
+    final token = _pendingInviteToken;
+    if (token == null) return;
+    if (checked) {
+      PendingInvite.remember(token, inviterName: _invitedByName);
+    } else {
+      PendingInvite.clear();
+    }
   }
 
   void _openOtpScreen(
@@ -282,6 +314,14 @@ class _LoginScreenState extends State<LoginScreen>
                       style: AppText.sans(12, color: AppColors.destructive),
                     ),
                   ),
+                if (_pendingInviteToken != null) ...[
+                  const SizedBox(height: AppSpacing.lg),
+                  _InviteCheckbox(
+                    name: _invitedByName,
+                    checked: _followInviteChecked,
+                    onChanged: _onInviteCheckboxChanged,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.xl),
                 GoldButton(
                   label: 'Continue',
@@ -303,6 +343,67 @@ class _LoginScreenState extends State<LoginScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Invited by ..." — shown only when an invite link brought the visitor
+/// here (see [PendingInvite]). Ticked by default: tapping the invite link
+/// already expressed the intent to follow that person, so this is a place
+/// to back out of it, not a consent step someone has to actively opt into.
+class _InviteCheckbox extends StatelessWidget {
+  final String? name;
+  final bool checked;
+  final ValueChanged<bool> onChanged;
+
+  const _InviteCheckbox({
+    required this.name,
+    required this.checked,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!checked),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 20,
+            height: 20,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(5),
+              color: checked ? AppColors.gold : Colors.transparent,
+              border: Border.all(
+                color: checked ? AppColors.gold : AppColors.border,
+                width: 1.4,
+              ),
+            ),
+            child: checked
+                ? const Icon(
+                    PhosphorIconsBold.check,
+                    size: 12,
+                    color: AppColors.background,
+                  )
+                : null,
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Text(
+                name == null
+                    ? 'Invited by a friend — follow them back once you join.'
+                    : 'Invited by $name — follow them back once you join.',
+                style: AppText.sans(12.5, color: AppColors.textDim),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

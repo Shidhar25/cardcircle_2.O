@@ -44,8 +44,12 @@ class _InvitePreviewScreenState extends State<InvitePreviewScreen> {
   bool _loading = true;
   bool _redeeming = false;
   String? _loadError;
+
+  /// Not shown on this screen (see `_body`) — kept only to pass along to
+  /// [PendingInvite] for Login's "Invited by ..." checkbox, and to name
+  /// the inviter in the post-redeem confirmation for an already-signed-in
+  /// visitor.
   String? _inviterName;
-  String? _inviterUsername;
 
   @override
   void didChangeDependencies() {
@@ -97,10 +101,6 @@ class _InvitePreviewScreenState extends State<InvitePreviewScreen> {
     setState(() {
       _loading = false;
       _inviterName = _firstNonEmpty([inviter['name'], inviter['full_name']]);
-      _inviterUsername = _firstNonEmpty([
-        inviter['username'],
-        inviter['handle'],
-      ]);
     });
   }
 
@@ -116,10 +116,17 @@ class _InvitePreviewScreenState extends State<InvitePreviewScreen> {
     final authState = Provider.of<AuthState>(context, listen: false);
     if (authState.hasProfile) {
       _redeemNow();
-    } else {
-      PendingInvite.remember(_token);
-      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+      return;
     }
+
+    PendingInvite.remember(_token, inviterName: _inviterName);
+    // Same choice Splash makes at app launch: someone who has never seen
+    // onboarding still needs to, invite or not; someone who has already
+    // been through it (e.g. logged out, or reopening the app) goes
+    // straight to Login, which is where the "Invited by ..." box actually
+    // shows up.
+    final route = authState.hasOnboarded ? '/login' : '/onboarding';
+    Navigator.pushNamedAndRemoveUntil(context, route, (route) => false);
   }
 
   Future<void> _redeemNow() async {
@@ -190,21 +197,34 @@ class _InvitePreviewScreenState extends State<InvitePreviewScreen> {
       );
     }
 
+    // The inviter's identity is deliberately not shown here — it surfaces
+    // later, on the Login screen's "Invited by ..." checkbox, once there is
+    // a phone number to attach it to. This screen only needs to confirm an
+    // invite exists at all.
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        AvatarBubble(
-          initials: (_inviterName ?? _inviterUsername ?? '?')
-              .trim()
-              .substring(0, 1)
-              .toUpperCase(),
-          size: 72,
+        Container(
+          width: 72,
+          height: 72,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [AppColors.goldLight, AppColors.goldDark],
+            ),
+          ),
+          child: const Icon(
+            PhosphorIconsFill.envelopeSimpleOpen,
+            size: 32,
+            color: AppColors.background,
+          ),
         ),
         const SizedBox(height: AppSpacing.xl),
         Text(
-          _inviterName != null
-              ? '$_inviterName invited you to CardCircle'
-              : 'You\'ve been invited to CardCircle',
+          "You've been invited to CardCircle",
           textAlign: TextAlign.center,
           style: AppText.sans(
             22,
@@ -212,13 +232,6 @@ class _InvitePreviewScreenState extends State<InvitePreviewScreen> {
             color: AppColors.text,
           ),
         ),
-        if (_inviterUsername != null) ...[
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '@$_inviterUsername',
-            style: AppText.sans(13, color: AppColors.textDim),
-          ),
-        ],
         const SizedBox(height: AppSpacing.sm),
         Text(
           'Join to see and share credit card benefits with your circle.',
