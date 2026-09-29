@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:phosphor_icons/phosphor_icons.dart';
 import 'package:provider/provider.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/api_service.dart';
@@ -12,7 +11,6 @@ import '../../../shared/widgets/card_variant_picker_sheet.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
-import '../../../shared/widgets/review_requesters_sheet.dart';
 
 /// v1 screen 09 — Add cards: back + step indicator, search bar, a flat
 /// toggleable list of cards, and a bottom summary bar with the "Enter
@@ -218,32 +216,6 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
         if (choice?.cardVariant != null) 'card_variant': choice!.cardVariant,
       };
     });
-  }
-
-  /// The catalog id "ask for a review" targets for [card].
-  ///
-  /// Unlike adding a card, asking about it does not need to know exactly
-  /// which network the person holds — the default edition's id is close
-  /// enough to find people who have *a* version of this product, and
-  /// asking a second "which one?" question just to open a read-only list
-  /// would be more friction than the feature is worth. Falls back to the
-  /// group's own id for the older flat catalog shape with no variants at
-  /// all.
-  static String? _reviewCardId(Map<String, dynamic> card) {
-    final defaultId = card['default_variant_id']?.toString();
-    if (defaultId != null && defaultId.isNotEmpty) return defaultId;
-    final variants = CardVariantOption.listFrom(card['variants']);
-    if (variants.isNotEmpty) return variants.first.cardId;
-    final id = (card['id'] ?? '').toString();
-    return id.isEmpty ? null : id;
-  }
-
-  void _handleAskForReview(Map<String, dynamic> card) {
-    final cardId = _reviewCardId(card);
-    if (cardId == null) return;
-    final cardInfo = (card['card'] as Map?)?.cast<String, dynamic>() ?? {};
-    final cardName = (cardInfo['name'] as String?) ?? 'this card';
-    ReviewRequestersSheet.show(context, cardId: cardId, cardName: cardName);
   }
 
   Future<void> _handleFinish() async {
@@ -473,8 +445,6 @@ class _SelectCardsScreenState extends State<SelectCardsScreen> {
                                 choice:
                                     _choices[_groupKeyOf(_visibleCards[index])],
                                 onTap: () => _toggleCard(_visibleCards[index]),
-                                onAskForReview: () =>
-                                    _handleAskForReview(_visibleCards[index]),
                               ),
                             )),
               ),
@@ -536,17 +506,11 @@ class _CardRow extends StatelessWidget {
   final CardVariantOption? choice;
   final VoidCallback onTap;
 
-  /// Opens the "who in your circle holds this?" sheet — a card not yet in
-  /// the wallet is exactly what that sheet is for, and every row here is
-  /// one of those.
-  final VoidCallback onAskForReview;
-
   const _CardRow({
     required this.card,
     required this.isSelected,
     required this.choice,
     required this.onTap,
-    required this.onAskForReview,
   });
 
   @override
@@ -651,23 +615,6 @@ class _CardRow extends StatelessWidget {
               ],
             ),
           ),
-          // Own gesture detector, not the row's `onTap` — asking for a
-          // review is a different action from adding the card, and a
-          // nested detector wins the hit test over the row's so tapping
-          // this never also toggles selection.
-          GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onAskForReview,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(
-                PhosphorIconsRegular.whatsappLogo,
-                size: 20,
-                color: AppColors.textDim,
-              ),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
           Container(
             width: 30,
             height: 30,

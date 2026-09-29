@@ -15,6 +15,7 @@ import '../../../shared/models/follow_back_status.dart';
 import '../../../shared/widgets/gritty_background.dart';
 import '../../../shared/widgets/app_snackbar.dart';
 import '../../../shared/widgets/primitives.dart';
+import '../../../shared/widgets/shared_cards_sheet.dart';
 
 /// v1 screen 23 — Circle. Matches CardCircle.html's `isCircle` block:
 /// title + follower/following counts, a FOLLOWERS / FOLLOWING / SUGGESTED
@@ -995,6 +996,7 @@ class _CircleScreenState extends State<CircleScreen> {
                   primary: true,
                   onTap: () => _showSharedCards(
                     (rows[i]['follow_id'] ?? '').toString(),
+                    (rows[i]['user_id'] ?? '').toString(),
                     (rows[i]['name'] ?? 'They').toString(),
                   ),
                 ),
@@ -1336,67 +1338,14 @@ class _CircleScreenState extends State<CircleScreen> {
     );
   }
 
-  /// GET /follow/following/{followId}/cards
-  Future<void> _showSharedCards(String followId, String name) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final cards = await ApiService.getSharedCards(followId);
-    if (!mounted) return;
-
-    if (cards == null) {
-      messenger.showError("Could not load $name's cards.");
-      return;
-    }
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.background,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.all(AppSpacing.xl),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            MonoLabel(
-              '${name.toUpperCase()} SHARES',
-              size: 10,
-              letterSpacing: 2,
-              color: AppColors.textDim,
-            ),
-            const SizedBox(height: AppSpacing.lg),
-            if (cards.isEmpty)
-              Text(
-                '$name has not shared any cards with you.',
-                style: AppText.sans(13, color: AppColors.textDim),
-              )
-            else
-              ...cards.map(
-                (c) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        PhosphorIconsRegular.creditCard,
-                        size: 16,
-                        color: AppColors.gold,
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      Expanded(
-                        child: Text(
-                          (c['card_name'] ?? 'Card').toString(),
-                          style: AppText.sans(13.5, color: AppColors.text),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: AppSpacing.lg),
-          ],
-        ),
-      ),
+  /// Opens the sheet listing a followed person's shared cards, each with a
+  /// call and a WhatsApp button — see [SharedCardsSheet].
+  void _showSharedCards(String followId, String userId, String name) {
+    SharedCardsSheet.show(
+      context,
+      followId: followId,
+      userId: userId,
+      name: name,
     );
   }
 }
